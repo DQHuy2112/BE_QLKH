@@ -5,6 +5,8 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
+// package com.example.product_service.entity;
+
 @Entity
 @Table(name = "shop_suppliers")
 @Data
@@ -22,6 +24,10 @@ public class ShopSupplier {
 
     @Column(name = "supplier_name")
     private String name;
+
+    // 👇 mới thêm
+    @Column(name = "supplier_type")
+    private String type;
 
     @Column(name = "address")
     private String address;

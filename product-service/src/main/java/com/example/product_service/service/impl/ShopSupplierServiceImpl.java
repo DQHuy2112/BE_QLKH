@@ -38,6 +38,7 @@ public class ShopSupplierServiceImpl implements ShopSupplierService {
         ShopSupplier db = getById(id);
         db.setCode(supplier.getCode());
         db.setName(supplier.getName());
+        db.setType(supplier.getType());
         db.setAddress(supplier.getAddress());
         db.setPhone(supplier.getPhone());
         db.setEmail(supplier.getEmail());

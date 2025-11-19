@@ -14,9 +14,12 @@ public class ProductDto {
     private String image;
     private BigDecimal unitPrice;
     private Integer quantity;
+    private Integer minStock;
+    private Integer maxStock;
     private String status;
     private Long categoryId;
     private Long supplierId;
     private Date createdAt;
     private Date updatedAt;
+    private String categoryName; // <── THÊM MỚI
 }

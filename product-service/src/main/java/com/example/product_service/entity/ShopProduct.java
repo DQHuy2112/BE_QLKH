@@ -16,7 +16,7 @@ public class ShopProduct {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "products_id")   // đúng với SQL
+    @Column(name = "products_id") // đúng với SQL
     private Long id;
 
     @Column(name = "product_code")
@@ -25,7 +25,7 @@ public class ShopProduct {
     @Column(name = "product_name")
     private String name;
 
-    @Column(name = "short_description")   // đúng SQL
+    @Column(name = "short_description") // đúng SQL
     private String shortDescription;
 
     @Column(name = "image")
@@ -36,6 +36,12 @@ public class ShopProduct {
 
     @Column(name = "quantity")
     private Integer quantity;
+
+    @Column(name = "min_stock")
+    private Integer minStock;
+
+    @Column(name = "max_stock")
+    private Integer maxStock;
 
     @Column(name = "status")
     private String status;
