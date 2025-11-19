@@ -23,7 +23,7 @@ public class ExportServiceImpl implements ExportService {
     private final ShopExportDetailRepository exportDetailRepo;
 
     public ExportServiceImpl(ShopExportRepository exportRepo,
-                             ShopExportDetailRepository exportDetailRepo) {
+            ShopExportDetailRepository exportDetailRepo) {
         this.exportRepo = exportRepo;
         this.exportDetailRepo = exportDetailRepo;
     }
@@ -44,8 +44,8 @@ public class ExportServiceImpl implements ExportService {
         if (req.getDetails() != null) {
             for (ExportDetailRequest d : req.getDetails()) {
                 ShopExportDetail ed = new ShopExportDetail();
-                ed.setExportId(ex.getId());
-                ed.setImportDetailId(d.getImportDetailId());
+                ed.setExport(ex);
+                ed.setImportDetailsId(d.getImportDetailsId());
                 ed.setProductId(d.getProductId());
                 ed.setQuantity(d.getQuantity());
                 ed.setUnitPrice(d.getUnitPrice());
@@ -113,7 +113,7 @@ public class ExportServiceImpl implements ExportService {
             for (ShopExportDetail d : details) {
                 ExportDetailDto ed = new ExportDetailDto();
                 ed.setId(d.getId());
-                ed.setImportDetailId(d.getImportDetailId());
+                ed.setImportDetailsId(d.getImportDetailsId());
                 ed.setProductId(d.getProductId());
                 ed.setQuantity(d.getQuantity());
                 ed.setUnitPrice(d.getUnitPrice());

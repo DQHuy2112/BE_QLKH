@@ -26,11 +26,12 @@ public class ShopExportDetail {
     private BigDecimal unitPrice;
 
     @Column(name = "import_details_id")
-    private Long importDetailId;  // FK -> shop_import_details.import_details_id
-
-    @Column(name = "exports_id")
-    private Long exportId;        // FK -> shop_exports.exports_id
+    private Long importDetailsId;
 
     @Column(name = "products_id")
-    private Long productId;       // FK -> shop_products.products_id
+    private Long productId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "exports_id")
+    private ShopExport export;
 }

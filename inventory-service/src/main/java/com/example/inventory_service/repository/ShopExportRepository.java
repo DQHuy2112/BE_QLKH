@@ -2,12 +2,30 @@ package com.example.inventory_service.repository;
 
 import com.example.inventory_service.entity.ShopExport;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.sql.Date;
 import java.util.List;
 
 public interface ShopExportRepository extends JpaRepository<ShopExport, Long> {
 
-    List<ShopExport> findByStoreId(Long storeId);
+  List<ShopExport> findByStoreId(Long storeId);
 
-    List<ShopExport> findByOrderId(Long orderId);
+  List<ShopExport> findByOrderId(Long orderId);
+
+  @Query("""
+         SELECT e FROM ShopExport e
+         WHERE e.exportType = 'SUPPLIER'
+           AND (:status IS NULL OR e.status = :status)
+           AND (:code IS NULL OR e.code LIKE CONCAT('%', :code, '%'))
+           AND (:fromDate IS NULL OR e.exportsDate >= :fromDate)
+           AND (:toDate IS NULL OR e.exportsDate < :toDate)
+         ORDER BY e.exportsDate DESC
+      """)
+  List<ShopExport> searchSupplierExports(
+      @Param("status") String status,
+      @Param("code") String code,
+      @Param("fromDate") Date fromDate,
+      @Param("toDate") Date toDate);
 }
