@@ -23,6 +23,11 @@ jwt:
   expiration-ms: 86400000
 
 
+file:
+  upload-dir: uploads        # thư mục gốc trong project
+
+
+
 eureka:
   client:
     service-url:

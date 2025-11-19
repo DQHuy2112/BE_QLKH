@@ -11,4 +11,7 @@ public interface ShopExportDetailRepository extends JpaRepository<ShopExportDeta
 
     // dùng cho tính tồn kho
     List<ShopExportDetail> findByProductId(Long productId);
+
+    // xóa chi tiết theo exportId (dùng cho update)
+    void deleteByExportId(Long exportId);
 }

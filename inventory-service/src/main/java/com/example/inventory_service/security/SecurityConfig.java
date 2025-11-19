@@ -27,6 +27,8 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api/exports/suppliers/**").permitAll() // (tạm thời mở)
                         .requestMatchers("/api/exports/**").permitAll() // (tạm thời mở)
+                        .requestMatchers("/api/imports/suppliers/**").permitAll() // (tạm thời mở)
+                        .requestMatchers("/api/imports/**").permitAll() // (tạm thời mở)
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

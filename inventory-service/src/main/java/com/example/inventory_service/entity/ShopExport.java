@@ -21,19 +21,27 @@ public class ShopExport {
     private Long id;
 
     @Column(name = "export_code")
-    private String code; // mã phiếu
+    private String code; // Mã phiếu (VD: PXNCC202511...)
 
+    /**
+     * SUPPLIER : Xuất/nhập với nhà cung cấp
+     * INTERNAL : Xuất/nhập nội bộ
+     * SALES : Xuất/nhập với NVBH / đơn hàng
+     */
     @Column(name = "export_type")
-    private String exportType; // SUPPLIER / INTERNAL / SALE_EMPLOYEE / ORDER
+    private String exportType;
 
-    @Column(name = "note")
+    @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 
     @Column(name = "description")
     private String description;
 
+    /**
+     * PENDING / APPROVED / REJECTED / EXPORTED / RETURNED...
+     */
     @Column(name = "status")
-    private String status; // PENDING / APPROVED / ...
+    private String status;
 
     @Column(name = "exports_date")
     private Date exportsDate;
@@ -41,14 +49,25 @@ public class ShopExport {
     @Column(name = "stores_id")
     private Long storeId;
 
+    /**
+     * Chỉ dùng khi exportType = SUPPLIER
+     */
     @Column(name = "supplier_id")
-    private Long supplierId; // chỉ dùng khi exportType = SUPPLIER
+    private Long supplierId;
 
+    /**
+     * Người lập phiếu (dùng cho NVBH hoặc audit sau này)
+     * Có thể NULL cho phiếu SUPPLIER / INTERNAL
+     */
     @Column(name = "user_id")
-    private Long userId; // người lập phiếu
+    private Long userId;
 
+    /**
+     * Nếu xuất theo đơn hàng (NVBH)
+     * NULL cho SUPPLIER / INTERNAL
+     */
     @Column(name = "order_id")
-    private Long orderId; // nếu xuất theo đơn
+    private Long orderId;
 
     @Column(name = "created_at")
     private Date createdAt;

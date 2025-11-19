@@ -14,8 +14,9 @@ public interface SupplierExportService {
             String status,
             String code,
             LocalDate fromDate,
-            LocalDate toDate
-    );
+            LocalDate toDate);
 
     SupplierExportDto getById(Long id);
+
+    SupplierExportDto update(Long id, SupplierExportRequest request);
 }

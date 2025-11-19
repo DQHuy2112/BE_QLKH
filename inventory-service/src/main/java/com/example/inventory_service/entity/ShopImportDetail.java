@@ -19,16 +19,15 @@ public class ShopImportDetail {
     @Column(name = "import_details_id")
     private Long id;
 
+    @Column(name = "imports_id")
+    private Long importId;
+
+    @Column(name = "products_id")
+    private Long productId;
+
     @Column(name = "quantity")
     private Integer quantity;
 
     @Column(name = "unit_price")
     private BigDecimal unitPrice;
-
-    @Column(name = "imports_id")
-    private Long importId;
-
-    @Column(name = "products_id")
-    private Long productId;   // tham chiếu shop_products
-
 }

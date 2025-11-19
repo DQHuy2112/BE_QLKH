@@ -24,25 +24,26 @@ public class SupplierExportController {
     public ApiResponse<List<SupplierExportDto>> search(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String code,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate fromDate,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate toDate
-    ) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
         return ApiResponse.ok(service.search(status, code, fromDate, toDate));
     }
 
     @PostMapping
     public ApiResponse<SupplierExportDto> create(
-            @RequestBody SupplierExportRequest request
-    ) {
+            @RequestBody SupplierExportRequest request) {
         return ApiResponse.ok("Created", service.create(request));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<SupplierExportDto> getById(@PathVariable Long id) {
         return ApiResponse.ok(service.getById(id));
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<SupplierExportDto> update(
+            @PathVariable Long id,
+            @RequestBody SupplierExportRequest request) {
+        return ApiResponse.ok(service.update(id, request));
     }
 }

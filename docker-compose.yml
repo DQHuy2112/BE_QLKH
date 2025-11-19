@@ -69,6 +69,11 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: 123456
 
+    volumes:
+      # map thư mục uploads trên máy thật vào /app/uploads trong container
+      - ./product-service/uploads:/app/uploads
+
+
   promotion-service:
     build: ./promotion-service
     container_name: promotion-service

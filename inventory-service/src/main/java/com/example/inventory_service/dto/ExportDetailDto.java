@@ -7,8 +7,11 @@ import java.math.BigDecimal;
 @Data
 public class ExportDetailDto {
     private Long id;
-    private Long importDetailsId;
     private Long productId;
+    private String productCode;
+    private String productName;
+    private String unit;
     private Integer quantity;
     private BigDecimal unitPrice;
+    private Long importDetailsId;
 }

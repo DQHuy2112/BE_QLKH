@@ -12,4 +12,7 @@ public interface ShopImportDetailRepository extends JpaRepository<ShopImportDeta
     // dùng cho tính tồn kho
     List<ShopImportDetail> findByProductId(Long productId);
 
+    // xóa chi tiết theo importId (dùng cho update)
+    void deleteByImportId(Long importId);
+
 }

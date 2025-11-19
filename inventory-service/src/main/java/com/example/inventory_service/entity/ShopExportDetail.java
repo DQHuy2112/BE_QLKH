@@ -25,7 +25,10 @@ public class ShopExportDetail {
     @Column(name = "unit_price")
     private BigDecimal unitPrice;
 
-    @Column(name = "import_details_id")
+    /**
+     * Tạm thời có thể = null, sau này bạn mapping thật với phiếu nhập (FIFO,...)
+     */
+    @Column(name = "import_details_id", nullable = true)
     private Long importDetailsId;
 
     @Column(name = "products_id")

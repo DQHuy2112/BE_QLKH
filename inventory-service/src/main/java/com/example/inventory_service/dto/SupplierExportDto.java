@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.util.Date;
+import java.util.List;
 
 @Data
 public class SupplierExportDto {
@@ -11,9 +12,10 @@ public class SupplierExportDto {
     private String code;
     private Long storeId;
     private Long supplierId;
-    private String supplierName;   // FE sẽ join từ product-service
+    private String supplierName; // FE sẽ join từ product-service
     private String status;
     private Date exportsDate;
     private String note;
     private BigDecimal totalValue; // tổng tiền = sum(quantity * unit_price)
+    private List<ExportDetailDto> items; // chi tiết sản phẩm
 }
