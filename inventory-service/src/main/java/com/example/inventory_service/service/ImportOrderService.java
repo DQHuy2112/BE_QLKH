@@ -1,12 +1,12 @@
 package com.example.inventory_service.service;
 
-import java.time.LocalDate;
-import java.util.List;
-
 import com.example.inventory_service.dto.SupplierImportDto;
 import com.example.inventory_service.dto.SupplierImportRequest;
 
-public interface SupplierImportService {
+import java.time.LocalDate;
+import java.util.List;
+
+public interface ImportOrderService {
 
     SupplierImportDto create(SupplierImportRequest request);
 
@@ -20,9 +20,9 @@ public interface SupplierImportService {
 
     SupplierImportDto update(Long id, SupplierImportRequest request);
 
-    // Xác nhận nhập kho (PENDING → IMPORTED)
-    SupplierImportDto confirm(Long id);
+    // Duyệt lệnh nhập (PENDING → APPROVED)
+    SupplierImportDto approve(Long id);
 
-    // Hủy phiếu nhập (PENDING → CANCELLED)
+    // Hủy lệnh nhập (PENDING → CANCELLED)
     SupplierImportDto cancel(Long id);
 }

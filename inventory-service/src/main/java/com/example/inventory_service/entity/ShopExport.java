@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
-import java.util.List;
 
 @Entity
 @Table(name = "shop_exports")
@@ -69,12 +68,12 @@ public class ShopExport {
     @Column(name = "order_id")
     private Long orderId;
 
+    @Column(name = "attachment_image")
+    private String attachmentImage; // /uploads/...
+
     @Column(name = "created_at")
     private Date createdAt;
 
     @Column(name = "updated_at")
     private Date updatedAt;
-
-    @OneToMany(mappedBy = "export", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ShopExportDetail> details;
 }

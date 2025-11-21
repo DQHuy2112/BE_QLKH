@@ -46,4 +46,18 @@ public class SupplierExportController {
             @RequestBody SupplierExportRequest request) {
         return ApiResponse.ok(service.update(id, request));
     }
+
+    // ================= CONFIRM (PENDING → EXPORTED) =====================
+    @PostMapping("/{id}/confirm")
+    public ApiResponse<SupplierExportDto> confirm(@PathVariable Long id) {
+        SupplierExportDto dto = service.confirm(id);
+        return ApiResponse.ok("Đã xác nhận xuất kho", dto);
+    }
+
+    // ================= CANCEL (PENDING → CANCELLED) =====================
+    @PostMapping("/{id}/cancel")
+    public ApiResponse<SupplierExportDto> cancel(@PathVariable Long id) {
+        SupplierExportDto dto = service.cancel(id);
+        return ApiResponse.ok("Đã hủy phiếu xuất", dto);
+    }
 }

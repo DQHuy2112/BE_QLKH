@@ -18,7 +18,11 @@ public class SupplierController {
     }
 
     @GetMapping
-    public ApiResponse<List<ShopSupplier>> list() {
+    public ApiResponse<List<ShopSupplier>> list(
+            @RequestParam(required = false) String type) {
+        if (type != null && !type.isBlank()) {
+            return ApiResponse.ok(service.findByType(type));
+        }
         return ApiResponse.ok(service.findAll());
     }
 
@@ -34,7 +38,7 @@ public class SupplierController {
 
     @PutMapping("/{id}")
     public ApiResponse<ShopSupplier> update(@PathVariable Long id,
-                                            @RequestBody ShopSupplier supplier) {
+            @RequestBody ShopSupplier supplier) {
         return ApiResponse.ok("Updated", service.update(id, supplier));
     }
 

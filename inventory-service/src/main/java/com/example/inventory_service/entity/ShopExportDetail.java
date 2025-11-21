@@ -34,7 +34,6 @@ public class ShopExportDetail {
     @Column(name = "products_id")
     private Long productId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "exports_id")
-    private ShopExport export;
+    @Column(name = "exports_id")
+    private Long exportId;
 }

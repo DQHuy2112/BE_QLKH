@@ -90,6 +90,43 @@ public class ShopProductController {
     }
 
     // =======================
+    // CẬP NHẬT TỒN KHO (Gọi từ Inventory-service)
+    // =======================
+
+    @PostMapping("/{id}/quantity/increase")
+    public ApiResponse<Void> increaseQuantity(
+            @PathVariable Long id,
+            @RequestBody QuantityChangeRequest request) {
+        productService.increaseQuantity(id, request.amount);
+        return ApiResponse.ok("Increased quantity", null);
+    }
+
+    @PostMapping("/{id}/quantity/decrease")
+    public ApiResponse<Void> decreaseQuantity(
+            @PathVariable Long id,
+            @RequestBody QuantityChangeRequest request) {
+        productService.decreaseQuantity(id, request.amount);
+        return ApiResponse.ok("Decreased quantity", null);
+    }
+
+    @PutMapping("/{id}/quantity")
+    public ApiResponse<Void> updateQuantity(
+            @PathVariable Long id,
+            @RequestBody UpdateQuantityRequest request) {
+        productService.updateQuantity(id, request.quantity);
+        return ApiResponse.ok("Updated quantity", null);
+    }
+
+    // DTO classes
+    public static class QuantityChangeRequest {
+        public int amount;
+    }
+
+    public static class UpdateQuantityRequest {
+        public int quantity;
+    }
+
+    // =======================
     // IMAGES + DISCOUNT
     // =======================
 

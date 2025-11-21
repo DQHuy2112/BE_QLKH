@@ -27,3 +27,9 @@ eureka:
   client:
     service-url:
       defaultZone: http://discovery-server:8761/eureka
+
+
+# URL của Product-service (dùng tên service trong Eureka)
+product:
+  service:
+    url: http://product-service

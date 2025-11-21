@@ -3,7 +3,7 @@ package com.example.inventory_service.controller;
 import com.example.inventory_service.common.ApiResponse;
 import com.example.inventory_service.dto.SupplierImportDto;
 import com.example.inventory_service.dto.SupplierImportRequest;
-import com.example.inventory_service.service.SupplierImportService;
+import com.example.inventory_service.service.InternalImportService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,12 +11,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/imports/suppliers")
-public class SupplierImportController {
+@RequestMapping("/api/imports/internal")
+public class InternalImportController {
 
-    private final SupplierImportService service;
+    private final InternalImportService service;
 
-    public SupplierImportController(SupplierImportService service) {
+    public InternalImportController(InternalImportService service) {
         this.service = service;
     }
 
@@ -59,14 +59,13 @@ public class SupplierImportController {
     @PostMapping("/{id}/confirm")
     public ApiResponse<SupplierImportDto> confirm(@PathVariable Long id) {
         SupplierImportDto dto = service.confirm(id);
-        return ApiResponse.ok("Đã xác nhận nhập kho", dto);
+        return ApiResponse.ok("Đã xác nhận nhập kho nội bộ", dto);
     }
 
     // ================= CANCEL (PENDING → CANCELLED) =====================
     @PostMapping("/{id}/cancel")
     public ApiResponse<SupplierImportDto> cancel(@PathVariable Long id) {
         SupplierImportDto dto = service.cancel(id);
-        return ApiResponse.ok("Đã hủy phiếu nhập", dto);
+        return ApiResponse.ok("Đã hủy phiếu nhập nội bộ", dto);
     }
-
 }

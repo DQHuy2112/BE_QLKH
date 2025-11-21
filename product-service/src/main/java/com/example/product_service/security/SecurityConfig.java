@@ -28,6 +28,10 @@ public class SecurityConfig {
                         // ✅ Cho phép health check
                         .requestMatchers("/actuator/**").permitAll()
 
+                        // ✅ Cho phép internal service gọi API cập nhật tồn kho
+                        .requestMatchers("/api/products/*/quantity/**").permitAll()
+                        .requestMatchers("/api/products/*/quantity").permitAll()
+
                         // ✅ Tất cả API khác cần authenticate
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

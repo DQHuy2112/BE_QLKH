@@ -18,16 +18,16 @@ public class StockServiceImpl implements StockService {
     private final ShopExportDetailRepository exportDetailRepo;
 
     public StockServiceImpl(ShopImportDetailRepository importDetailRepo,
-                            ShopExportDetailRepository exportDetailRepo) {
+            ShopExportDetailRepository exportDetailRepo) {
         this.importDetailRepo = importDetailRepo;
         this.exportDetailRepo = exportDetailRepo;
     }
 
     @Override
     public List<StockDto> getAllStock() {
-        // lấy tất cả import_details & export_details
-        List<ShopImportDetail> imports = importDetailRepo.findAll();
-        List<ShopExportDetail> exports = exportDetailRepo.findAll();
+        // CHỈ lấy các phiếu đã IMPORTED/EXPORTED (bỏ qua PENDING và CANCELLED)
+        List<ShopImportDetail> imports = importDetailRepo.findAllImported();
+        List<ShopExportDetail> exports = exportDetailRepo.findAllExported();
 
         // map productId -> [importQty, exportQty]
         Map<Long, StockDto> map = new HashMap<>();
@@ -76,8 +76,9 @@ public class StockServiceImpl implements StockService {
         StockDto dto = new StockDto();
         dto.setProductId(productId);
 
-        List<ShopImportDetail> imports = importDetailRepo.findByProductId(productId);
-        List<ShopExportDetail> exports = exportDetailRepo.findByProductId(productId);
+        // CHỈ lấy các phiếu đã IMPORTED/EXPORTED
+        List<ShopImportDetail> imports = importDetailRepo.findImportedByProductId(productId);
+        List<ShopExportDetail> exports = exportDetailRepo.findExportedByProductId(productId);
 
         if (imports.isEmpty() && exports.isEmpty()) {
             // tùy anh: hoặc trả 0, hoặc báo not found
@@ -98,5 +99,20 @@ public class StockServiceImpl implements StockService {
         return dto;
     }
 
-    
+    @Override
+    public boolean hasEnoughStock(Long productId, int quantity) {
+        int current = getCurrentStock(productId);
+        return current >= quantity;
+    }
+
+    @Override
+    public int getCurrentStock(Long productId) {
+        try {
+            StockDto dto = getStockByProduct(productId);
+            return dto.getCurrentQty();
+        } catch (NotFoundException e) {
+            // Chưa có dữ liệu tồn kho = 0
+            return 0;
+        }
+    }
 }

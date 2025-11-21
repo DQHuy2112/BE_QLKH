@@ -19,4 +19,10 @@ public interface SupplierExportService {
     SupplierExportDto getById(Long id);
 
     SupplierExportDto update(Long id, SupplierExportRequest request);
+
+    // Xác nhận xuất kho (PENDING → EXPORTED)
+    SupplierExportDto confirm(Long id);
+
+    // Hủy phiếu xuất (PENDING → CANCELLED)
+    SupplierExportDto cancel(Long id);
 }

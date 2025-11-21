@@ -23,6 +23,11 @@ public class ShopSupplierServiceImpl implements ShopSupplierService {
     }
 
     @Override
+    public List<ShopSupplier> findByType(String type) {
+        return repo.findByType(type);
+    }
+
+    @Override
     public ShopSupplier getById(Long id) {
         return repo.findById(id)
                 .orElseThrow(() -> new NotFoundException("Supplier not found with id = " + id));

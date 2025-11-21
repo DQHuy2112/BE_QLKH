@@ -17,18 +17,26 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SupplierExportServiceImpl implements SupplierExportService {
 
     private final ShopExportRepository exportRepo;
     private final ShopExportDetailRepository detailRepo;
+    private final com.example.inventory_service.service.StockService stockService;
+    private final com.example.inventory_service.client.ProductServiceClient productClient;
 
     public SupplierExportServiceImpl(ShopExportRepository exportRepo,
-            ShopExportDetailRepository detailRepo) {
+            ShopExportDetailRepository detailRepo,
+            com.example.inventory_service.service.StockService stockService,
+            com.example.inventory_service.client.ProductServiceClient productClient) {
         this.exportRepo = exportRepo;
         this.detailRepo = detailRepo;
+        this.stockService = stockService;
+        this.productClient = productClient;
     }
 
     @Override
@@ -55,6 +63,18 @@ public class SupplierExportServiceImpl implements SupplierExportService {
         export.setCreatedAt(now);
         export.setUpdatedAt(now);
 
+        // ===== LƯU NHIỀU ẢNH VÀO 1 CỘT attachment_image =====
+        if (req.getAttachmentImages() != null && !req.getAttachmentImages().isEmpty()) {
+            String joined = req.getAttachmentImages().stream()
+                    .map(this::normalizeImagePath) // chuẩn hoá /uploads/...
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.joining(";")); // path1;path2;path3
+
+            export.setAttachmentImage(joined);
+        } else {
+            export.setAttachmentImage(null);
+        }
+
         export = exportRepo.save(export);
 
         // ===== 2. Chi tiết phiếu xuất =====
@@ -70,7 +90,7 @@ public class SupplierExportServiceImpl implements SupplierExportService {
             }
 
             ShopExportDetail d = new ShopExportDetail();
-            d.setExport(export);
+            d.setExportId(export.getId());
             d.setProductId(item.getProductId());
             d.setImportDetailsId(item.getImportDetailsId()); // hiện tại có thể là 0
             d.setQuantity(item.getQuantity());
@@ -86,9 +106,6 @@ public class SupplierExportServiceImpl implements SupplierExportService {
         if (!details.isEmpty()) {
             detailRepo.saveAll(details);
         }
-
-        // Nếu muốn, có thể set vào entity để khi toDtoWithCalcTotal không bị lazy
-        export.setDetails(details);
 
         return toDto(export, total);
     }
@@ -141,6 +158,17 @@ public class SupplierExportServiceImpl implements SupplierExportService {
         export.setDescription(req.getDescription());
         export.setUpdatedAt(new java.util.Date());
 
+        // Cập nhật ảnh
+        if (req.getAttachmentImages() != null && !req.getAttachmentImages().isEmpty()) {
+            String joined = req.getAttachmentImages().stream()
+                    .map(this::normalizeImagePath)
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.joining(";"));
+            export.setAttachmentImage(joined);
+        } else {
+            export.setAttachmentImage(null);
+        }
+
         export = exportRepo.save(export);
 
         // Xóa chi tiết cũ
@@ -159,7 +187,7 @@ public class SupplierExportServiceImpl implements SupplierExportService {
             }
 
             ShopExportDetail d = new ShopExportDetail();
-            d.setExport(export);
+            d.setExportId(export.getId());
             d.setProductId(item.getProductId());
             d.setImportDetailsId(item.getImportDetailsId());
             d.setQuantity(item.getQuantity());
@@ -176,8 +204,6 @@ public class SupplierExportServiceImpl implements SupplierExportService {
             detailRepo.saveAll(details);
         }
 
-        export.setDetails(details);
-
         return toDto(export, total);
     }
 
@@ -193,8 +219,11 @@ public class SupplierExportServiceImpl implements SupplierExportService {
         BigDecimal total = BigDecimal.ZERO;
         List<ExportDetailDto> itemDtos = new ArrayList<>();
 
-        if (e.getDetails() != null) {
-            for (ShopExportDetail d : e.getDetails()) {
+        // Lấy chi tiết từ repository
+        List<ShopExportDetail> details = detailRepo.findByExportId(e.getId());
+
+        if (details != null) {
+            for (ShopExportDetail d : details) {
                 if (d.getUnitPrice() == null || d.getQuantity() == null)
                     continue;
 
@@ -237,6 +266,100 @@ public class SupplierExportServiceImpl implements SupplierExportService {
 
         // FE sẽ tự join tên NCC từ product-service hoặc bạn bổ sung sau
         dto.setSupplierName(null);
+
+        // ==== map nhiều ảnh từ 1 cột attachment_image ====
+        List<String> images = new ArrayList<>();
+        String raw = e.getAttachmentImage();
+        if (raw != null && !raw.isBlank()) {
+            images = Arrays.stream(raw.split(";"))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        }
+        dto.setAttachmentImages(images);
+
         return dto;
     }
+
+    // luôn lưu dạng /uploads/... để khớp WebConfig + FE
+    private String normalizeImagePath(String raw) {
+        if (raw == null || raw.isBlank())
+            return null;
+
+        // nếu FE gửi full URL http://.../uploads/...
+        int idx = raw.indexOf("/uploads/");
+        if (idx >= 0) {
+            return raw.substring(idx);
+        }
+
+        // nếu FE gửi tương đối mà thiếu dấu /
+        if (!raw.startsWith("/")) {
+            return "/" + raw;
+        }
+
+        return raw;
+    }
+
+    // =========================================================
+    // XÁC NHẬN XUẤT KHO (PENDING → EXPORTED)
+    // =========================================================
+    @Override
+    @Transactional
+    public SupplierExportDto confirm(Long id) {
+        ShopExport export = exportRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Export not found: " + id));
+
+        // Chỉ cho phép confirm khi đang PENDING
+        if (!"PENDING".equals(export.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể xác nhận phiếu đang ở trạng thái PENDING");
+        }
+
+        // Kiểm tra tồn kho trước khi xuất
+        List<ShopExportDetail> details = detailRepo.findByExportId(id);
+        for (ShopExportDetail d : details) {
+            if (!stockService.hasEnoughStock(d.getProductId(), d.getQuantity())) {
+                int current = stockService.getCurrentStock(d.getProductId());
+                throw new IllegalStateException(
+                        String.format("Sản phẩm ID %d không đủ số lượng trong kho. Tồn: %d, Cần: %d",
+                                d.getProductId(), current, d.getQuantity()));
+            }
+        }
+
+        // Cập nhật trạng thái
+        export.setStatus("EXPORTED");
+        export.setUpdatedAt(new java.util.Date());
+        export = exportRepo.save(export);
+
+        // Cập nhật tồn kho: Giảm số lượng theo từng sản phẩm trong phiếu
+        for (ShopExportDetail d : details) {
+            if (d.getQuantity() != null && d.getQuantity() > 0) {
+                productClient.decreaseQuantity(d.getProductId(), d.getQuantity());
+            }
+        }
+
+        return toDtoWithCalcTotal(export);
+    }
+
+    // =========================================================
+    // HỦY PHIẾU XUẤT (PENDING → CANCELLED)
+    // =========================================================
+    @Override
+    @Transactional
+    public SupplierExportDto cancel(Long id) {
+        ShopExport export = exportRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Export not found: " + id));
+
+        // Chỉ cho phép hủy khi đang PENDING
+        if (!"PENDING".equals(export.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể hủy phiếu đang ở trạng thái PENDING");
+        }
+
+        // Cập nhật trạng thái
+        export.setStatus("CANCELLED");
+        export.setUpdatedAt(new java.util.Date());
+        export = exportRepo.save(export);
+
+        return toDtoWithCalcTotal(export);
+    }
+
 }

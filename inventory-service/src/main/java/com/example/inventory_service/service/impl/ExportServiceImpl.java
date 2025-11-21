@@ -44,7 +44,7 @@ public class ExportServiceImpl implements ExportService {
         if (req.getDetails() != null) {
             for (ExportDetailRequest d : req.getDetails()) {
                 ShopExportDetail ed = new ShopExportDetail();
-                ed.setExport(ex);
+                ed.setExportId(ex.getId());
                 ed.setImportDetailsId(d.getImportDetailsId());
                 ed.setProductId(d.getProductId());
                 ed.setQuantity(d.getQuantity());

@@ -1,12 +1,12 @@
 package com.example.inventory_service.service;
 
-import java.time.LocalDate;
-import java.util.List;
-
 import com.example.inventory_service.dto.SupplierImportDto;
 import com.example.inventory_service.dto.SupplierImportRequest;
 
-public interface SupplierImportService {
+import java.time.LocalDate;
+import java.util.List;
+
+public interface InternalImportService {
 
     SupplierImportDto create(SupplierImportRequest request);
 

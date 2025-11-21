@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -153,4 +154,70 @@ public class ShopProductServiceImpl implements ShopProductService {
         p.setCategoryId(req.getCategoryId());
         p.setSupplierId(req.getSupplierId());
     }
+
+    // =========================================================
+    // CẬP NHẬT TỒN KHO (Gọi từ Inventory-service)
+    // =========================================================
+
+    @Override
+    @Transactional
+    public void increaseQuantity(Long id, int amount) {
+        System.out.println("🟢 Increasing quantity for product ID: " + id + ", amount: " + amount);
+
+        ShopProduct product = repo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
+
+        int currentQty = product.getQuantity() != null ? product.getQuantity() : 0;
+        int newQty = currentQty + amount;
+
+        System.out.println("📦 Current quantity: " + currentQty + " → New quantity: " + newQty);
+
+        product.setQuantity(newQty);
+        product.setUpdatedAt(new java.util.Date());
+
+        repo.save(product);
+
+        System.out.println("✅ Successfully updated quantity in database");
+    }
+
+    @Override
+    @Transactional
+    public void decreaseQuantity(Long id, int amount) {
+        System.out.println("🔴 Decreasing quantity for product ID: " + id + ", amount: " + amount);
+
+        ShopProduct product = repo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
+
+        int currentQty = product.getQuantity() != null ? product.getQuantity() : 0;
+        int newQty = currentQty - amount;
+
+        System.out.println("📦 Current quantity: " + currentQty + " → New quantity: " + newQty);
+
+        // Không cho phép tồn kho âm
+        if (newQty < 0) {
+            System.err.println("❌ Not enough stock! Current: " + currentQty + ", Need: " + amount);
+            throw new IllegalStateException(
+                    String.format("Không đủ tồn kho. Hiện tại: %d, Cần giảm: %d", currentQty, amount));
+        }
+
+        product.setQuantity(newQty);
+        product.setUpdatedAt(new java.util.Date());
+
+        repo.save(product);
+
+        System.out.println("✅ Successfully updated quantity in database");
+    }
+
+    @Override
+    @Transactional
+    public void updateQuantity(Long id, int quantity) {
+        ShopProduct product = repo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
+
+        product.setQuantity(quantity);
+        product.setUpdatedAt(new java.util.Date());
+
+        repo.save(product);
+    }
+
 }

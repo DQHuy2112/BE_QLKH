@@ -1,5 +1,6 @@
 package com.example.inventory_service.service.impl;
 
+import com.example.inventory_service.client.ProductServiceClient;
 import com.example.inventory_service.dto.ImportDetailDto;
 import com.example.inventory_service.dto.ImportDetailRequest;
 import com.example.inventory_service.dto.SupplierImportDto;
@@ -9,7 +10,7 @@ import com.example.inventory_service.entity.ShopImportDetail;
 import com.example.inventory_service.exception.NotFoundException;
 import com.example.inventory_service.repository.ShopImportDetailRepository;
 import com.example.inventory_service.repository.ShopImportRepository;
-import com.example.inventory_service.service.SupplierImportService;
+import com.example.inventory_service.service.InternalImportService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,67 +22,67 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Service xử lý phiếu nhập nội bộ (INTERNAL)
+ * Logic tương tự SupplierImport nhưng import_type = "INTERNAL"
+ */
 @Service
-public class SupplierImportServiceImpl implements SupplierImportService {
+public class InternalImportServiceImpl implements InternalImportService {
 
     private final ShopImportRepository importRepo;
     private final ShopImportDetailRepository detailRepo;
-    private final com.example.inventory_service.client.ProductServiceClient productClient;
+    private final ProductServiceClient productClient;
+    private final com.example.inventory_service.repository.ShopStoreRepository storeRepo;
 
-    public SupplierImportServiceImpl(
+    public InternalImportServiceImpl(
             ShopImportRepository importRepo,
             ShopImportDetailRepository detailRepo,
-            com.example.inventory_service.client.ProductServiceClient productClient) {
+            ProductServiceClient productClient,
+            com.example.inventory_service.repository.ShopStoreRepository storeRepo) {
         this.importRepo = importRepo;
         this.detailRepo = detailRepo;
         this.productClient = productClient;
+        this.storeRepo = storeRepo;
     }
 
-    // =========================================================
-    // CREATE PHIẾU NHẬP NCC
-    // =========================================================
     @Override
     @Transactional
     public SupplierImportDto create(SupplierImportRequest request) {
         java.util.Date now = new java.util.Date();
 
-        // --------- Tạo phiếu nhập (ShopImport) ---------
         ShopImport im = new ShopImport();
 
-        // nếu client gửi code thì dùng, không thì tự sinh
         if (request.getCode() != null && !request.getCode().isBlank()) {
             im.setCode(request.getCode());
         } else {
             im.setCode(generateCode());
         }
 
-        im.setImportType("SUPPLIER");
+        im.setImportType("INTERNAL"); // ⭐ Khác biệt chính
         im.setStoreId(request.getStoreId());
-        im.setSupplierId(request.getSupplierId());
+        // Với phiếu nội bộ, supplierId lưu sourceStoreId
+        im.setSupplierId(request.getSourceStoreId() != null ? request.getSourceStoreId() : request.getSupplierId());
         im.setNote(limitNote(request.getNote()));
         im.setDescription(request.getDescription());
         im.setStatus("PENDING");
         im.setImportsDate(now);
         im.setCreatedAt(now);
         im.setUpdatedAt(now);
-        // TODO: nếu có JWT thì set userId từ token
 
-        // ===== LƯU NHIỀU ẢNH VÀO 1 CỘT attachment_image =====
+        // Lưu ảnh
         if (request.getAttachmentImages() != null && !request.getAttachmentImages().isEmpty()) {
             String joined = request.getAttachmentImages().stream()
-                    .map(this::normalizeImagePath) // chuẩn hoá /uploads/...
+                    .map(this::normalizeImagePath)
                     .filter(s -> s != null && !s.isBlank())
-                    .collect(Collectors.joining(";")); // path1;path2;path3
-
+                    .collect(Collectors.joining(";"));
             im.setAttachmentImage(joined);
         } else {
             im.setAttachmentImage(null);
         }
 
-        // lưu phiếu nhập
         im = importRepo.save(im);
 
-        // --------- Lưu chi tiết phiếu nhập ---------
+        // Lưu chi tiết
         BigDecimal total = BigDecimal.ZERO;
         List<ShopImportDetail> details = new ArrayList<>();
 
@@ -110,14 +111,9 @@ public class SupplierImportServiceImpl implements SupplierImportService {
             detailRepo.saveAll(details);
         }
 
-        // TODO: cập nhật tồn kho nếu bạn có bảng stocks
-
         return toDto(im, total);
     }
 
-    // =========================================================
-    // SEARCH PHIẾU NHẬP NCC
-    // =========================================================
     @Override
     @Transactional(readOnly = true)
     public List<SupplierImportDto> search(
@@ -128,7 +124,8 @@ public class SupplierImportServiceImpl implements SupplierImportService {
         Date fromDate = from != null ? Date.valueOf(from) : null;
         Date toDate = to != null ? Date.valueOf(to.plusDays(1)) : null;
 
-        List<ShopImport> list = importRepo.searchSupplierImports(
+        // Chỉ lấy phiếu INTERNAL
+        List<ShopImport> list = importRepo.searchInternalImports(
                 status,
                 code,
                 fromDate,
@@ -141,34 +138,30 @@ public class SupplierImportServiceImpl implements SupplierImportService {
         return result;
     }
 
-    // =========================================================
-    // LẤY CHI TIẾT 1 PHIẾU NHẬP NCC
-    // =========================================================
     @Override
     @Transactional(readOnly = true)
     public SupplierImportDto getById(Long id) {
         ShopImport im = importRepo.findById(id)
-                .orElseThrow(() -> new NotFoundException("Import not found: " + id));
+                .orElseThrow(() -> new NotFoundException("Internal import not found: " + id));
+
+        // Kiểm tra có phải INTERNAL không
+        if (!"INTERNAL".equals(im.getImportType())) {
+            throw new IllegalStateException("This is not an internal import");
+        }
 
         return toDtoWithCalcTotal(im);
     }
 
-    // =========================================================
-    // UPDATE PHIẾU NHẬP NCC
-    // =========================================================
     @Override
     @Transactional
     public SupplierImportDto update(Long id, SupplierImportRequest request) {
-        // Tìm phiếu nhập cũ
         ShopImport im = importRepo.findById(id)
-                .orElseThrow(() -> new NotFoundException("Import not found: " + id));
+                .orElseThrow(() -> new NotFoundException("Internal import not found: " + id));
 
-        // Cập nhật thông tin phiếu nhập
         if (request.getCode() != null && !request.getCode().isBlank()) {
             im.setCode(request.getCode());
         }
         im.setStoreId(request.getStoreId());
-        im.setSupplierId(request.getSupplierId());
         im.setNote(limitNote(request.getNote()));
         im.setDescription(request.getDescription());
         im.setUpdatedAt(new java.util.Date());
@@ -220,16 +213,54 @@ public class SupplierImportServiceImpl implements SupplierImportService {
         return toDto(im, total);
     }
 
-    // =========================================================
-    // HELPER METHODS
-    // =========================================================
+    @Override
+    @Transactional
+    public SupplierImportDto confirm(Long id) {
+        ShopImport im = importRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Internal import not found: " + id));
 
-    // sinh mã phiếu nhập NCC, tạm dùng timestamp
-    private String generateCode() {
-        return "PNNCC" + System.currentTimeMillis();
+        if (!"PENDING".equals(im.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể xác nhận phiếu đang ở trạng thái PENDING");
+        }
+
+        im.setStatus("IMPORTED");
+        im.setUpdatedAt(new java.util.Date());
+        im = importRepo.save(im);
+
+        // Cập nhật tồn kho
+        List<ShopImportDetail> details = detailRepo.findByImportId(id);
+        for (ShopImportDetail d : details) {
+            if (d.getQuantity() != null && d.getQuantity() > 0) {
+                productClient.increaseQuantity(d.getProductId(), d.getQuantity());
+            }
+        }
+
+        return toDtoWithCalcTotal(im);
     }
 
-    // tránh lỗi "Data too long for column 'note'"
+    @Override
+    @Transactional
+    public SupplierImportDto cancel(Long id) {
+        ShopImport im = importRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Internal import not found: " + id));
+
+        if (!"PENDING".equals(im.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể hủy phiếu đang ở trạng thái PENDING");
+        }
+
+        im.setStatus("CANCELLED");
+        im.setUpdatedAt(new java.util.Date());
+        im = importRepo.save(im);
+
+        return toDtoWithCalcTotal(im);
+    }
+
+    // ========= HELPER METHODS ========= //
+
+    private String generateCode() {
+        return "PNNB" + System.currentTimeMillis(); // Phiếu Nhập Nội Bộ
+    }
+
     private String limitNote(String note) {
         if (note == null)
             return null;
@@ -237,18 +268,15 @@ public class SupplierImportServiceImpl implements SupplierImportService {
         return note.length() > max ? note.substring(0, max) : note;
     }
 
-    // luôn lưu dạng /uploads/... để khớp WebConfig + FE
     private String normalizeImagePath(String raw) {
         if (raw == null || raw.isBlank())
             return null;
 
-        // nếu FE gửi full URL http://.../uploads/...
         int idx = raw.indexOf("/uploads/");
         if (idx >= 0) {
             return raw.substring(idx);
         }
 
-        // nếu FE gửi tương đối mà thiếu dấu /
         if (!raw.startsWith("/")) {
             return "/" + raw;
         }
@@ -256,7 +284,6 @@ public class SupplierImportServiceImpl implements SupplierImportService {
         return raw;
     }
 
-    // Tính lại tổng tiền từ bảng chi tiết
     private SupplierImportDto toDtoWithCalcTotal(ShopImport im) {
         List<ShopImportDetail> details = detailRepo.findByImportId(im.getId());
         BigDecimal total = BigDecimal.ZERO;
@@ -270,14 +297,11 @@ public class SupplierImportServiceImpl implements SupplierImportService {
                 BigDecimal line = d.getUnitPrice().multiply(BigDecimal.valueOf(d.getQuantity()));
                 total = total.add(line);
 
-                // Map sang DTO
                 ImportDetailDto itemDto = new ImportDetailDto();
                 itemDto.setId(d.getId());
                 itemDto.setProductId(d.getProductId());
                 itemDto.setQuantity(d.getQuantity());
                 itemDto.setUnitPrice(d.getUnitPrice());
-
-                // FE sẽ tự join thông tin sản phẩm từ product-service
                 itemDto.setProductCode(null);
                 itemDto.setProductName(null);
                 itemDto.setUnit(null);
@@ -287,25 +311,41 @@ public class SupplierImportServiceImpl implements SupplierImportService {
         }
 
         SupplierImportDto dto = toDto(im, total);
-        dto.setItems(itemDtos); // ⭐ Thêm dòng này
+        dto.setItems(itemDtos);
         return dto;
     }
 
-    // map entity -> DTO
     private SupplierImportDto toDto(ShopImport imp, BigDecimal total) {
         SupplierImportDto dto = new SupplierImportDto();
         dto.setId(imp.getId());
         dto.setCode(imp.getCode());
         dto.setStoreId(imp.getStoreId());
-        dto.setSupplierId(imp.getSupplierId());
+        dto.setSupplierId(imp.getSupplierId()); // Đây là sourceStoreId cho phiếu nội bộ
         dto.setStatus(imp.getStatus());
         dto.setImportsDate(imp.getImportsDate());
         dto.setNote(imp.getNote());
         dto.setTotalValue(total);
 
-        dto.setSupplierName(null);
+        // Lấy tên kho đích
+        if (imp.getStoreId() != null) {
+            storeRepo.findById(imp.getStoreId()).ifPresent(store -> {
+                dto.setStoreName(store.getName());
+            });
+        }
 
-        // ==== map nhiều ảnh từ 1 cột attachment_image ====
+        // Lấy tên kho nguồn (supplierId trong phiếu nội bộ là sourceStoreId)
+        if (imp.getSupplierId() != null) {
+            dto.setSourceStoreId(imp.getSupplierId());
+            storeRepo.findById(imp.getSupplierId()).ifPresent(store -> {
+                dto.setSourceStoreName(store.getName());
+                // ⭐ Gán tên kho nguồn vào supplierName để frontend hiển thị giống phiếu NCC
+                dto.setSupplierName(store.getName());
+            });
+        } else {
+            dto.setSupplierName(null);
+        }
+
+        // Map ảnh
         List<String> images = new ArrayList<>();
         String raw = imp.getAttachmentImage();
         if (raw != null && !raw.isBlank()) {
@@ -318,57 +358,4 @@ public class SupplierImportServiceImpl implements SupplierImportService {
 
         return dto;
     }
-
-    // =========================================================
-    // XÁC NHẬN NHẬP KHO (PENDING → IMPORTED)
-    // =========================================================
-    @Override
-    @Transactional
-    public SupplierImportDto confirm(Long id) {
-        ShopImport im = importRepo.findById(id)
-                .orElseThrow(() -> new NotFoundException("Import not found: " + id));
-
-        // Chỉ cho phép confirm khi đang PENDING
-        if (!"PENDING".equals(im.getStatus())) {
-            throw new IllegalStateException("Chỉ có thể xác nhận phiếu đang ở trạng thái PENDING");
-        }
-
-        // Cập nhật trạng thái
-        im.setStatus("IMPORTED");
-        im.setUpdatedAt(new java.util.Date());
-        im = importRepo.save(im);
-
-        // Cập nhật tồn kho: Tăng số lượng theo từng sản phẩm trong phiếu
-        List<ShopImportDetail> details = detailRepo.findByImportId(id);
-        for (ShopImportDetail d : details) {
-            if (d.getQuantity() != null && d.getQuantity() > 0) {
-                productClient.increaseQuantity(d.getProductId(), d.getQuantity());
-            }
-        }
-
-        return toDtoWithCalcTotal(im);
-    }
-
-    // =========================================================
-    // HỦY PHIẾU NHẬP (PENDING → CANCELLED)
-    // =========================================================
-    @Override
-    @Transactional
-    public SupplierImportDto cancel(Long id) {
-        ShopImport im = importRepo.findById(id)
-                .orElseThrow(() -> new NotFoundException("Import not found: " + id));
-
-        // Chỉ cho phép hủy khi đang PENDING
-        if (!"PENDING".equals(im.getStatus())) {
-            throw new IllegalStateException("Chỉ có thể hủy phiếu đang ở trạng thái PENDING");
-        }
-
-        // Cập nhật trạng thái
-        im.setStatus("CANCELLED");
-        im.setUpdatedAt(new java.util.Date());
-        im = importRepo.save(im);
-
-        return toDtoWithCalcTotal(im);
-    }
-
 }

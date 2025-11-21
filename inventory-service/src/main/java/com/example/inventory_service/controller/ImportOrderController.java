@@ -3,7 +3,7 @@ package com.example.inventory_service.controller;
 import com.example.inventory_service.common.ApiResponse;
 import com.example.inventory_service.dto.SupplierImportDto;
 import com.example.inventory_service.dto.SupplierImportRequest;
-import com.example.inventory_service.service.SupplierImportService;
+import com.example.inventory_service.service.ImportOrderService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,12 +11,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/imports/suppliers")
-public class SupplierImportController {
+@RequestMapping("/api/orders/imports")
+public class ImportOrderController {
 
-    private final SupplierImportService service;
+    private final ImportOrderService service;
 
-    public SupplierImportController(SupplierImportService service) {
+    public ImportOrderController(ImportOrderService service) {
         this.service = service;
     }
 
@@ -55,18 +55,17 @@ public class SupplierImportController {
         return ApiResponse.ok(dto);
     }
 
-    // ================= CONFIRM (PENDING → IMPORTED) =====================
-    @PostMapping("/{id}/confirm")
-    public ApiResponse<SupplierImportDto> confirm(@PathVariable Long id) {
-        SupplierImportDto dto = service.confirm(id);
-        return ApiResponse.ok("Đã xác nhận nhập kho", dto);
+    // ================= APPROVE (PENDING → APPROVED) =====================
+    @PostMapping("/{id}/approve")
+    public ApiResponse<SupplierImportDto> approve(@PathVariable Long id) {
+        SupplierImportDto dto = service.approve(id);
+        return ApiResponse.ok("Đã duyệt lệnh nhập kho", dto);
     }
 
     // ================= CANCEL (PENDING → CANCELLED) =====================
     @PostMapping("/{id}/cancel")
     public ApiResponse<SupplierImportDto> cancel(@PathVariable Long id) {
         SupplierImportDto dto = service.cancel(id);
-        return ApiResponse.ok("Đã hủy phiếu nhập", dto);
+        return ApiResponse.ok("Đã hủy lệnh nhập kho", dto);
     }
-
 }

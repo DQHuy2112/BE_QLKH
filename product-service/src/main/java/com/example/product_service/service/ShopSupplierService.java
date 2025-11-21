@@ -8,6 +8,8 @@ public interface ShopSupplierService {
 
     List<ShopSupplier> findAll();
 
+    List<ShopSupplier> findByType(String type);
+
     ShopSupplier getById(Long id);
 
     ShopSupplier create(ShopSupplier supplier);
