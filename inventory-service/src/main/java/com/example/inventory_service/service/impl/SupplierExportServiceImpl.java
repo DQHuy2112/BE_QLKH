@@ -342,11 +342,30 @@ public class SupplierExportServiceImpl implements SupplierExportService {
         // Kiểm tra tồn kho trước khi xuất
         List<ShopExportDetail> details = detailRepo.findByExportId(id);
         for (ShopExportDetail d : details) {
-            if (!stockService.hasEnoughStock(d.getProductId(), d.getQuantity())) {
-                int current = stockService.getCurrentStock(d.getProductId());
+            Integer quantity = d.getQuantity();
+            if (quantity == null || quantity <= 0) {
+                continue;
+            }
+
+            Long productId = d.getProductId();
+
+            // Ưu tiên kiểm tra tồn thực tế từ product-service (nguồn dữ liệu chuẩn)
+            Integer realtimeQty = productClient.getProductQuantity(productId);
+            if (realtimeQty != null) {
+                if (realtimeQty < quantity) {
+                    throw new IllegalStateException(
+                            String.format("Sản phẩm ID %d không đủ số lượng trong kho. Tồn: %d, Cần: %d",
+                                    productId, realtimeQty, quantity));
+                }
+                continue; // đã kiểm tra xong theo tồn thực tế
+            }
+
+            // Fallback: dùng lịch sử nhập/xuất trong inventory-service
+            if (!stockService.hasEnoughStock(productId, quantity)) {
+                int current = stockService.getCurrentStock(productId);
                 throw new IllegalStateException(
                         String.format("Sản phẩm ID %d không đủ số lượng trong kho. Tồn: %d, Cần: %d",
-                                d.getProductId(), current, d.getQuantity()));
+                                productId, current, quantity));
             }
         }
 
