@@ -31,7 +31,7 @@ services:
       # dùng MySQL đang chạy trên Windows
       SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: Viethien1@
+      SPRING_DATASOURCE_PASSWORD: 123456
 
   order-service:
     build: ./order-service
@@ -43,7 +43,7 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
       SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: Viethien1@
+      SPRING_DATASOURCE_PASSWORD: 123456
 
   inventory-service:
     build: ./inventory-service
@@ -55,7 +55,7 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
       SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: Viethien1@
+      SPRING_DATASOURCE_PASSWORD: 123456
 
   product-service:
     build: ./product-service
@@ -67,7 +67,7 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
       SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: Viethien1@
+      SPRING_DATASOURCE_PASSWORD: 123456
 
     volumes:
       # map thư mục uploads trên máy thật vào /app/uploads trong container
@@ -84,7 +84,7 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
       SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: Viethien1@
+      SPRING_DATASOURCE_PASSWORD: 123456
 
   settings-cms-service:
     build: ./settings-cms-service
@@ -96,7 +96,7 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
       SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: Viethien1@
+      SPRING_DATASOURCE_PASSWORD: 123456
 
   ai-service:
     build: ./ai-service
