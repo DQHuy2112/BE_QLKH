@@ -25,7 +25,7 @@ public class ShopProduct {
     @Column(name = "product_name")
     private String name;
 
-    @Column(name = "short_description") // đúng SQL
+    @Column(name = "short_description", columnDefinition = "TEXT") // TEXT để lưu mô tả dài từ AI
     private String shortDescription;
 
     @Column(name = "image")

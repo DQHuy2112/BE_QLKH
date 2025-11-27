@@ -139,7 +139,12 @@ public class ShopProductServiceImpl implements ShopProductService {
     private void applyRequestToEntity(ProductRequest req, ShopProduct p) {
         p.setCode(req.getCode());
         p.setName(req.getName());
-        p.setShortDescription(req.getShortDescription());
+        // Cắt ngắn mô tả nếu quá dài (giới hạn 5000 ký tự để an toàn)
+        String description = req.getShortDescription();
+        if (description != null && description.length() > 5000) {
+            description = description.substring(0, 5000);
+        }
+        p.setShortDescription(description);
         p.setImage(req.getImage());
         p.setUnitPrice(req.getUnitPrice());
 
