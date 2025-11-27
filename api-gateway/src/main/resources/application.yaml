@@ -27,8 +27,12 @@ spring:
           predicates:
             - Path=/api/products,/api/products/**,
                   /api/categories,/api/categories/**,
-                  /api/suppliers,/api/suppliers/**
+                  /api/suppliers,/api/suppliers/**,
                   /api/units,/api/units/**
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai/**
 
         # INVENTORY SERVICE (store + import)
         - id: inventory-service
@@ -64,6 +68,12 @@ spring:
           uri: lb://auth-service
           predicates:
             - Path=/api/auth/**
+
+        # AI SERVICE
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai,/api/ai/**
 
       # CORS + header dedupe
       default-filters:

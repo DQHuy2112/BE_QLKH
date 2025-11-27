@@ -98,6 +98,16 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: Viethien1@
 
+  ai-service:
+    build: ./ai-service
+    container_name: ai-service
+    depends_on:
+      - discovery-server
+    environment:
+      SPRING_APPLICATION_NAME: ai-service
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
 networks:
   default:
     name: qlkh-network

@@ -17,5 +17,6 @@
         <module>order-service</module>
         <module>api-gateway</module>
         <module>discovery-server</module>
+        <module>ai-service</module>
     </modules>
 </project>
