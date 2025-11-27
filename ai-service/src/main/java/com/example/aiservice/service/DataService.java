@@ -150,14 +150,7 @@ public class DataService {
      */
     public String getOrdersSummary(String token) {
         try {
-            WebClient webClient = webClientBuilder.baseUrl(apiGatewayUrl).build();
-            List<Map<String, Object>> orders = webClient.get()
-                    .uri("/api/orders")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                    .block(TIMEOUT);
+            List<Map<String, Object>> orders = fetchOrdersList(token);
 
             if (orders == null || orders.isEmpty()) {
                 return "Không có đơn hàng nào trong hệ thống.";
@@ -181,6 +174,45 @@ public class DataService {
             log.error("Error fetching orders", e);
             return "Không thể lấy dữ liệu đơn hàng: " + e.getMessage();
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> fetchOrdersList(String token) {
+        try {
+            WebClient webClient = webClientBuilder.baseUrl(apiGatewayUrl).build();
+
+            Map<String, Object> response = webClient.get()
+                    .uri("/api/orders")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block(TIMEOUT);
+
+            if (response != null && response.containsKey("data")) {
+                List<Map<String, Object>> data = (List<Map<String, Object>>) response.get("data");
+                return data != null ? data : new ArrayList<>();
+            } else {
+                List<Map<String, Object>> orders = webClient.get()
+                        .uri("/api/orders")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                        .block(TIMEOUT);
+                return orders != null ? orders : new ArrayList<>();
+            }
+        } catch (Exception e) {
+            log.error("Error fetching orders list", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Public method để lấy danh sách sản phẩm (cho các service khác sử dụng)
+     */
+    public List<Map<String, Object>> fetchProductsListPublic(String token) {
+        return fetchProductsList(token);
     }
 
     /**
