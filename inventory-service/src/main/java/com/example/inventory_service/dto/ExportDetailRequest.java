@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 @Data
 public class ExportDetailRequest {
     private Long productId;
+    private Long storeId; // Kho xuất cho dòng này (nếu null thì dùng kho mặc định từ header)
     private Long importDetailsId; // có thể null, sau này xử lý FIFO
     private Integer quantity;
     private BigDecimal unitPrice;

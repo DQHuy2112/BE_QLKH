@@ -65,11 +65,20 @@ public class ShopProductServiceImpl implements ShopProductService {
     }
 
     @Override
+    @Transactional
     public void delete(Long id) {
         if (!repo.existsById(id)) {
             throw new NotFoundException("Product not found: " + id);
         }
-        repo.deleteById(id);
+        
+        try {
+            repo.deleteById(id);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new IllegalStateException(
+                "Không thể xóa sản phẩm này vì đang được sử dụng trong phiếu nhập/xuất kho hoặc tồn kho. " +
+                "Vui lòng xóa các phiếu liên quan trước."
+            );
+        }
     }
 
     // ✅ search + phân trang
@@ -118,12 +127,10 @@ public class ShopProductServiceImpl implements ShopProductService {
         dto.setShortDescription(p.getShortDescription());
         dto.setImage(p.getImage());
         dto.setUnitPrice(p.getUnitPrice());
-        dto.setQuantity(p.getQuantity());
-        dto.setMinStock(p.getMinStock()); // 👈 THÊM
-        dto.setMaxStock(p.getMaxStock()); // 👈 THÊM
         dto.setStatus(p.getStatus());
         dto.setCategoryId(p.getCategoryId());
         dto.setSupplierId(p.getSupplierId());
+        dto.setUnitId(p.getUnitId());
         dto.setCreatedAt(p.getCreatedAt());
         dto.setUpdatedAt(p.getUpdatedAt());
 
@@ -147,82 +154,10 @@ public class ShopProductServiceImpl implements ShopProductService {
         p.setShortDescription(description);
         p.setImage(req.getImage());
         p.setUnitPrice(req.getUnitPrice());
-
-        // quantity có thể null → default 0
-        p.setQuantity(req.getQuantity() != null ? req.getQuantity() : 0);
-
-        // 👇 THÊM 2 field tồn kho
-        p.setMinStock(req.getMinStock());
-        p.setMaxStock(req.getMaxStock());
-
         p.setStatus(req.getStatus());
         p.setCategoryId(req.getCategoryId());
         p.setSupplierId(req.getSupplierId());
-    }
-
-    // =========================================================
-    // CẬP NHẬT TỒN KHO (Gọi từ Inventory-service)
-    // =========================================================
-
-    @Override
-    @Transactional
-    public void increaseQuantity(Long id, int amount) {
-        System.out.println("🟢 Increasing quantity for product ID: " + id + ", amount: " + amount);
-
-        ShopProduct product = repo.findById(id)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
-
-        int currentQty = product.getQuantity() != null ? product.getQuantity() : 0;
-        int newQty = currentQty + amount;
-
-        System.out.println("📦 Current quantity: " + currentQty + " → New quantity: " + newQty);
-
-        product.setQuantity(newQty);
-        product.setUpdatedAt(new java.util.Date());
-
-        repo.save(product);
-
-        System.out.println("✅ Successfully updated quantity in database");
-    }
-
-    @Override
-    @Transactional
-    public void decreaseQuantity(Long id, int amount) {
-        System.out.println("🔴 Decreasing quantity for product ID: " + id + ", amount: " + amount);
-
-        ShopProduct product = repo.findById(id)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
-
-        int currentQty = product.getQuantity() != null ? product.getQuantity() : 0;
-        int newQty = currentQty - amount;
-
-        System.out.println("📦 Current quantity: " + currentQty + " → New quantity: " + newQty);
-
-        // Không cho phép tồn kho âm
-        if (newQty < 0) {
-            System.err.println("❌ Not enough stock! Current: " + currentQty + ", Need: " + amount);
-            throw new IllegalStateException(
-                    String.format("Không đủ tồn kho. Hiện tại: %d, Cần giảm: %d", currentQty, amount));
-        }
-
-        product.setQuantity(newQty);
-        product.setUpdatedAt(new java.util.Date());
-
-        repo.save(product);
-
-        System.out.println("✅ Successfully updated quantity in database");
-    }
-
-    @Override
-    @Transactional
-    public void updateQuantity(Long id, int quantity) {
-        ShopProduct product = repo.findById(id)
-                .orElseThrow(() -> new NotFoundException("Product not found: " + id));
-
-        product.setQuantity(quantity);
-        product.setUpdatedAt(new java.util.Date());
-
-        repo.save(product);
+        p.setUnitId(req.getUnitId());
     }
 
 }

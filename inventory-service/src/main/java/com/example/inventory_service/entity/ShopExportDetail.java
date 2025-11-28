@@ -40,6 +40,9 @@ public class ShopExportDetail {
     @Column(name = "products_id")
     private Long productId;
 
+    @Column(name = "stores_id", nullable = false)
+    private Long storeId;
+
     @Column(name = "exports_id")
     private Long exportId;
 }

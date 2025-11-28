@@ -6,6 +6,6 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 public interface ShopProductRepository
         extends JpaRepository<ShopProduct, Long>, JpaSpecificationExecutor<ShopProduct> {
-    
+
     boolean existsByUnitId(Long unitId);
 }

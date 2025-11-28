@@ -132,8 +132,10 @@ public class ProductServiceClient {
                 dto.setCode((String) data.get("code"));
                 dto.setPhone((String) data.get("phone"));
                 dto.setAddress((String) data.get("address"));
+                dto.setType((String) data.get("type")); // Lấy supplier type
 
-                System.out.println("✅ Supplier DTO created: id=" + dto.getId() + ", name=" + dto.getName());
+                System.out.println("✅ Supplier DTO created: id=" + dto.getId() + ", name=" + dto.getName() + ", type="
+                        + dto.getType());
                 return dto;
             }
             System.err.println("❌ Response is null or data is missing");
@@ -142,6 +144,49 @@ public class ProductServiceClient {
             System.err.println("❌ Failed to get supplier info: " + e.getMessage());
             e.printStackTrace();
             return null;
+        }
+    }
+
+    /**
+     * Lấy danh sách sản phẩm theo kho
+     */
+    public java.util.List<ProductDto> getProductsByStoreId(Long storeId) {
+        String url = productServiceUrl + "/api/products?storeId=" + storeId;
+        try {
+            System.out.println("🔵 Calling Product-service: " + url);
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> response = restTemplate.getForObject(url, java.util.Map.class);
+            if (response != null && response.get("data") != null) {
+                Object dataObj = response.get("data");
+                if (dataObj instanceof java.util.List) {
+                    @SuppressWarnings("unchecked")
+                    java.util.List<java.util.Map<String, Object>> dataList = (java.util.List<java.util.Map<String, Object>>) dataObj;
+                    java.util.List<ProductDto> products = new java.util.ArrayList<>();
+                    for (java.util.Map<String, Object> map : dataList) {
+                        ProductDto dto = new ProductDto();
+                        if (map.get("id") != null)
+                            dto.setId(((Number) map.get("id")).longValue());
+                        if (map.get("code") != null)
+                            dto.setCode((String) map.get("code"));
+                        if (map.get("name") != null)
+                            dto.setName((String) map.get("name"));
+                        if (map.get("quantity") != null)
+                            dto.setQuantity(((Number) map.get("quantity")).intValue());
+                        if (map.get("unitPrice") != null) {
+                            dto.setUnitPrice(new java.math.BigDecimal(map.get("unitPrice").toString()));
+                        }
+                        if (map.get("storeId") != null)
+                            dto.setStoreId(((Number) map.get("storeId")).longValue());
+                        products.add(dto);
+                    }
+                    return products;
+                }
+            }
+            return new java.util.ArrayList<>();
+        } catch (Exception e) {
+            System.err.println("❌ Failed to get products by storeId=" + storeId + ": " + e.getMessage());
+            e.printStackTrace();
+            return new java.util.ArrayList<>();
         }
     }
 
@@ -212,6 +257,7 @@ public class ProductServiceClient {
         private String code;
         private String phone;
         private String address;
+        private String type; // NCC, INTERNAL, STAFF, ...
 
         public Long getId() {
             return id;
@@ -251,6 +297,14 @@ public class ProductServiceClient {
 
         public void setAddress(String address) {
             this.address = address;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
         }
     }
 
@@ -319,6 +373,64 @@ public class ProductServiceClient {
 
         public QuantityChangeRequest(int amount) {
             this.amount = amount;
+        }
+    }
+
+    // DTO for Product
+    public static class ProductDto {
+        private Long id;
+        private String code;
+        private String name;
+        private Integer quantity;
+        private java.math.BigDecimal unitPrice;
+        private Long storeId;
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public void setCode(String code) {
+            this.code = code;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public Integer getQuantity() {
+            return quantity;
+        }
+
+        public void setQuantity(Integer quantity) {
+            this.quantity = quantity;
+        }
+
+        public java.math.BigDecimal getUnitPrice() {
+            return unitPrice;
+        }
+
+        public void setUnitPrice(java.math.BigDecimal unitPrice) {
+            this.unitPrice = unitPrice;
+        }
+
+        public Long getStoreId() {
+            return storeId;
+        }
+
+        public void setStoreId(Long storeId) {
+            this.storeId = storeId;
         }
     }
 }

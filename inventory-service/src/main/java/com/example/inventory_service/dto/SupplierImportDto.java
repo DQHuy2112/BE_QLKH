@@ -16,6 +16,7 @@ public class SupplierImportDto {
 
     private Long storeId;
     private String storeName; // Tên kho đích (kho nhận hàng)
+    private String storeCode; // Mã kho đích (kho nhận hàng)
 
     private Long supplierId;
     private String supplierName; // Tên NCC (cho phiếu nhập từ NCC)

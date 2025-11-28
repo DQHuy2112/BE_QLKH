@@ -6,11 +6,15 @@ import java.util.List;
 @Data
 public class SupplierExportRequest {
     private String code; // optional, nếu null BE tự sinh
-    private Long storeId; // Kho đích (kho nhận hàng)
-    private Long supplierId; // Nhà cung cấp (cho phiếu xuất NCC)
-    private Long sourceStoreId; // Kho nguồn (cho phiếu xuất nội bộ - nơi xuất hàng)
-    private Long targetStoreId; // Kho đích (cho phiếu xuất nội bộ - deprecated, dùng storeId)
-    private Long staffId; // ID nhân viên (cho phiếu xuất từ nhân viên)
+    private Long storeId; // Kho xuất (bắt buộc)
+    private Long customerId; // ID khách hàng (bắt buộc)
+    private Long orderId; // ID đơn hàng (nếu xuất theo đơn)
+
+    // Thông tin khách hàng (nếu xuất trực tiếp không qua shop_customers)
+    private String customerName; // Bắt buộc nếu không có customerId
+    private String customerPhone;
+    private String customerAddress;
+
     private String note;
     private String description;
     private List<String> attachmentImages; // đường dẫn ảnh FE gửi (/uploads/... hoặc full URL)

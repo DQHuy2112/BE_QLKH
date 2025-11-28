@@ -23,12 +23,10 @@ public class ShopExport {
     private String code; // Mã phiếu (VD: PXNCC202511...)
 
     /**
-     * SUPPLIER : Xuất/nhập với nhà cung cấp
-     * INTERNAL : Xuất/nhập nội bộ
-     * SALES : Xuất/nhập với NVBH / đơn hàng
+     * Luôn = 'ORDER' (xuất cho khách hàng)
      */
-    @Column(name = "export_type")
-    private String exportType;
+    @Column(name = "export_type", nullable = false)
+    private String exportType = "ORDER";
 
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
@@ -49,24 +47,35 @@ public class ShopExport {
     private Long storeId;
 
     /**
-     * Chỉ dùng khi exportType = SUPPLIER
-     */
-    @Column(name = "supplier_id")
-    private Long supplierId;
-
-    /**
-     * Người lập phiếu (dùng cho NVBH hoặc audit sau này)
-     * Có thể NULL cho phiếu SUPPLIER / INTERNAL
+     * Người lập phiếu
      */
     @Column(name = "user_id")
     private Long userId;
 
     /**
-     * Nếu xuất theo đơn hàng (NVBH)
-     * NULL cho SUPPLIER / INTERNAL
+     * Nếu xuất theo đơn hàng
      */
     @Column(name = "order_id")
     private Long orderId;
+
+    /**
+     * Khách hàng - Có thể NULL nếu nhập trực tiếp (không qua shop_customers)
+     * Phiếu xuất chỉ dùng cho khách hàng
+     */
+    @Column(name = "customers_id", nullable = true)
+    private Long customerId;
+
+    /**
+     * Thông tin khách hàng (nếu nhập trực tiếp không qua shop_customers)
+     */
+    @Column(name = "customer_name", columnDefinition = "VARCHAR(255)")
+    private String customerName;
+
+    @Column(name = "customer_phone", columnDefinition = "VARCHAR(50)")
+    private String customerPhone;
+
+    @Column(name = "customer_address", columnDefinition = "TEXT")
+    private String customerAddress;
 
     @Column(name = "attachment_image")
     private String attachmentImage; // /uploads/...

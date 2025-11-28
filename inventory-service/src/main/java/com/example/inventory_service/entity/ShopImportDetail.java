@@ -25,6 +25,9 @@ public class ShopImportDetail {
     @Column(name = "products_id")
     private Long productId;
 
+    @Column(name = "stores_id", nullable = false)
+    private Long storeId;
+
     @Column(name = "quantity")
     private Integer quantity;
 

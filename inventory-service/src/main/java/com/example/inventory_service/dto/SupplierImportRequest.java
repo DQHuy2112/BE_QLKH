@@ -8,10 +8,9 @@ public class SupplierImportRequest {
 
     private String code; // optional: nếu không gửi, BE sẽ tự sinh
 
-    private Long storeId; // Kho đích (kho nhận hàng)
-    private Long supplierId; // ID nhà cung cấp (cho phiếu nhập từ NCC)
-    private Long sourceStoreId; // ID kho nguồn (cho phiếu nhập nội bộ)
-    private Long staffId; // ID nhân viên (cho phiếu nhập từ nhân viên)
+    private Long storeId; // Kho nhập (bắt buộc)
+    private Long supplierId; // ID nhà cung cấp (bắt buộc)
+    private Long orderId; // ID đơn hàng (nếu nhập theo đơn)
 
     private String note;
     private String description;

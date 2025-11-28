@@ -34,15 +34,6 @@ public class ShopProduct {
     @Column(name = "unit_price")
     private BigDecimal unitPrice;
 
-    @Column(name = "quantity")
-    private Integer quantity;
-
-    @Column(name = "min_stock")
-    private Integer minStock;
-
-    @Column(name = "max_stock")
-    private Integer maxStock;
-
     @Column(name = "status")
     private String status;
 

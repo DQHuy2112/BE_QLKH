@@ -26,12 +26,4 @@ public interface ShopProductService {
             LocalDate fromDate,
             LocalDate toDate,
             Pageable pageable);
-
-    // Cập nhật tồn kho (gọi từ Inventory-service)
-    void increaseQuantity(Long id, int amount);
-
-    void decreaseQuantity(Long id, int amount);
-
-    void updateQuantity(Long id, int quantity);
-
 }

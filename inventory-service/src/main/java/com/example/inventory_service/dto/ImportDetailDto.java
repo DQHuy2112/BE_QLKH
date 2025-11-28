@@ -7,6 +7,9 @@ import java.math.BigDecimal;
 public class ImportDetailDto {
     private Long id;
     private Long productId;
+    private Long storeId;
+    private String storeName;
+    private String storeCode;
     private String productCode;
     private String productName;
     private String unit;

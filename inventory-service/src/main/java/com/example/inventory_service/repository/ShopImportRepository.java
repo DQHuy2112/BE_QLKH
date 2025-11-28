@@ -47,22 +47,6 @@ public interface ShopImportRepository extends JpaRepository<ShopImport, Long> {
   @Query("""
       select i
       from ShopImport i
-      where i.importType = 'ORDER'
-        and (:status is null or i.status = :status)
-        and (:code is null or i.code like concat('%', :code, '%'))
-        and (:fromDate is null or i.importsDate >= :fromDate)
-        and (:toDate is null or i.importsDate < :toDate)
-      order by i.importsDate desc
-      """)
-  List<ShopImport> searchImportOrders(
-      @Param("status") String status,
-      @Param("code") String code,
-      @Param("fromDate") Date fromDate,
-      @Param("toDate") Date toDate);
-
-  @Query("""
-      select i
-      from ShopImport i
       where i.importType = 'STAFF'
         and (:status is null or i.status = :status)
         and (:code is null or i.code like concat('%', :code, '%'))
@@ -71,6 +55,22 @@ public interface ShopImportRepository extends JpaRepository<ShopImport, Long> {
       order by i.importsDate desc
       """)
   List<ShopImport> searchStaffImports(
+      @Param("status") String status,
+      @Param("code") String code,
+      @Param("fromDate") Date fromDate,
+      @Param("toDate") Date toDate);
+
+  // Unified search - không filter theo type
+  @Query("""
+      select i
+      from ShopImport i
+      where (:status is null or i.status = :status)
+        and (:code is null or i.code like concat('%', :code, '%'))
+        and (:fromDate is null or i.importsDate >= :fromDate)
+        and (:toDate is null or i.importsDate < :toDate)
+      order by i.importsDate desc
+      """)
+  List<ShopImport> searchAllImports(
       @Param("status") String status,
       @Param("code") String code,
       @Param("fromDate") Date fromDate,

@@ -1,19 +1,28 @@
 package com.example.inventory_service.service;
 
-import com.example.inventory_service.dto.ExportDto;
-import com.example.inventory_service.dto.ExportRequest;
+import com.example.inventory_service.dto.SupplierExportDto;
+import com.example.inventory_service.dto.SupplierExportRequest;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface ExportService {
 
-    ExportDto create(ExportRequest req);
+    SupplierExportDto create(SupplierExportRequest req);
 
-    List<ExportDto> getAll();
+    List<SupplierExportDto> search(String status, String code, LocalDate from, LocalDate to);
 
-    ExportDto getById(Long id);
+    SupplierExportDto getById(Long id);
 
-    List<ExportDto> getByStore(Long storeId);
+    SupplierExportDto update(Long id, SupplierExportRequest req);
 
-    List<ExportDto> getByOrder(Long orderId);
+    SupplierExportDto confirm(Long id);
+
+    SupplierExportDto cancel(Long id);
+
+    List<SupplierExportDto> getAll();
+
+    List<SupplierExportDto> getByStore(Long storeId);
+
+    List<SupplierExportDto> getByOrder(Long orderId);
 }

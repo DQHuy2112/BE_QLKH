@@ -11,9 +11,6 @@ public class ProductRequest {
     private String shortDescription;
     private String image;
     private BigDecimal unitPrice;
-    private Integer quantity;
-    private Integer minStock;
-    private Integer maxStock;
 
     private String status;
     private Long categoryId;

@@ -1,11 +1,13 @@
 package com.example.inventory_service.controller;
 
 import com.example.inventory_service.common.ApiResponse;
-import com.example.inventory_service.dto.ImportDto;
-import com.example.inventory_service.dto.ImportRequest;
+import com.example.inventory_service.dto.SupplierImportDto;
+import com.example.inventory_service.dto.SupplierImportRequest;
 import com.example.inventory_service.service.ImportService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -18,23 +20,64 @@ public class ImportController {
         this.service = service;
     }
 
-    @PostMapping
-    public ApiResponse<ImportDto> create(@RequestBody ImportRequest req) {
-        return ApiResponse.ok("Created", service.create(req));
+    // ================= SEARCH =====================
+    @GetMapping
+    public ApiResponse<List<SupplierImportDto>> search(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        List<SupplierImportDto> data = service.search(status, code, from, to);
+        return ApiResponse.ok(data);
     }
 
-    @GetMapping
-    public ApiResponse<List<ImportDto>> getAll() {
+    // ================= DETAIL =====================
+    @GetMapping("/{id}")
+    public ApiResponse<SupplierImportDto> getById(@PathVariable Long id) {
+        SupplierImportDto dto = service.getById(id);
+        return ApiResponse.ok(dto);
+    }
+
+    // ================= CREATE =====================
+    @PostMapping
+    public ApiResponse<SupplierImportDto> create(
+            @RequestBody SupplierImportRequest request) {
+        SupplierImportDto dto = service.create(request);
+        return ApiResponse.ok("Created", dto);
+    }
+
+    // ================= UPDATE =====================
+    @PutMapping("/{id}")
+    public ApiResponse<SupplierImportDto> update(
+            @PathVariable Long id,
+            @RequestBody SupplierImportRequest request) {
+        SupplierImportDto dto = service.update(id, request);
+        return ApiResponse.ok("Updated", dto);
+    }
+
+    // ================= CONFIRM (PENDING → IMPORTED) =====================
+    @PostMapping("/{id}/confirm")
+    public ApiResponse<SupplierImportDto> confirm(@PathVariable Long id) {
+        SupplierImportDto dto = service.confirm(id);
+        return ApiResponse.ok("Đã xác nhận nhập kho", dto);
+    }
+
+    // ================= CANCEL (PENDING → CANCELLED) =====================
+    @PostMapping("/{id}/cancel")
+    public ApiResponse<SupplierImportDto> cancel(@PathVariable Long id) {
+        SupplierImportDto dto = service.cancel(id);
+        return ApiResponse.ok("Đã hủy phiếu nhập", dto);
+    }
+
+    // ================= GET ALL =====================
+    @GetMapping("/all")
+    public ApiResponse<List<SupplierImportDto>> getAll() {
         return ApiResponse.ok(service.getAll());
     }
 
-    @GetMapping("/{id}")
-    public ApiResponse<ImportDto> getById(@PathVariable Long id) {
-        return ApiResponse.ok(service.getById(id));
-    }
-
+    // ================= GET BY STORE =====================
     @GetMapping("/by-store/{storeId}")
-    public ApiResponse<List<ImportDto>> getByStore(@PathVariable Long storeId) {
+    public ApiResponse<List<SupplierImportDto>> getByStore(@PathVariable Long storeId) {
         return ApiResponse.ok(service.getByStore(storeId));
     }
 }

@@ -13,25 +13,13 @@ public class SupplierExportDto {
     private String code;
 
     private Long storeId;
-    private String storeName; // Tên kho đích (kho nhận hàng)
-
-    private Long supplierId;
-    private String supplierName; // Tên nhà cung cấp/khách hàng (cho phiếu xuất NCC)
-    private String supplierCode; // Mã nhà cung cấp
-    private String supplierPhone; // Số điện thoại nhà cung cấp
-    private String supplierAddress; // Địa chỉ nhà cung cấp
-
-    private Long sourceStoreId; // ID kho nguồn (cho phiếu xuất nội bộ - nơi xuất hàng)
-    private String sourceStoreName; // Tên kho nguồn (cho phiếu xuất nội bộ)
-    private String sourceStoreCode; // Mã kho nguồn
-
-    private Long targetStoreId; // ID kho đích (deprecated, dùng storeId)
-    private String targetStoreName; // Tên kho đích (deprecated, dùng storeName)
-    private String targetStoreCode; // Mã kho đích (deprecated)
+    private String storeName; // Tên kho xuất
     private String storeCode; // Mã kho
 
-    private Long staffId; // ID nhân viên (cho phiếu xuất từ nhân viên)
-    private String staffName; // Tên nhân viên (cho phiếu xuất từ nhân viên)
+    private Long customerId; // ID khách hàng (bắt buộc)
+    private String customerName; // Tên khách hàng
+    private String customerPhone; // SĐT khách hàng
+    private String customerAddress; // Địa chỉ khách hàng
 
     private String status;
 
