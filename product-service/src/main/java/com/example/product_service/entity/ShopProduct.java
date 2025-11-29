@@ -40,9 +40,6 @@ public class ShopProduct {
     @Column(name = "category_id")
     private Long categoryId;
 
-    @Column(name = "supplier_id")
-    private Long supplierId;
-
     @Column(name = "unit_id")
     private Long unitId;
 

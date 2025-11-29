@@ -15,7 +15,6 @@ public class ProductDto {
     private BigDecimal unitPrice;
     private String status;
     private Long categoryId;
-    private Long supplierId;
     private Long unitId;
     private String unitName;
     private String unit;

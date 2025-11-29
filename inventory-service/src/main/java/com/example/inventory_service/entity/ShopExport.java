@@ -59,10 +59,10 @@ public class ShopExport {
     private Long orderId;
 
     /**
-     * Khách hàng - Có thể NULL nếu nhập trực tiếp (không qua shop_customers)
+     * Khách hàng - BẮT BUỘC (NOT NULL)
      * Phiếu xuất chỉ dùng cho khách hàng
      */
-    @Column(name = "customers_id", nullable = true)
+    @Column(name = "customers_id", nullable = false)
     private Long customerId;
 
     /**

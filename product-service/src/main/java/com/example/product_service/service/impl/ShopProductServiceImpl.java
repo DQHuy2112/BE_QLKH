@@ -129,7 +129,6 @@ public class ShopProductServiceImpl implements ShopProductService {
         dto.setUnitPrice(p.getUnitPrice());
         dto.setStatus(p.getStatus());
         dto.setCategoryId(p.getCategoryId());
-        dto.setSupplierId(p.getSupplierId());
         dto.setUnitId(p.getUnitId());
         dto.setCreatedAt(p.getCreatedAt());
         dto.setUpdatedAt(p.getUpdatedAt());
@@ -156,7 +155,6 @@ public class ShopProductServiceImpl implements ShopProductService {
         p.setUnitPrice(req.getUnitPrice());
         p.setStatus(req.getStatus());
         p.setCategoryId(req.getCategoryId());
-        p.setSupplierId(req.getSupplierId());
         p.setUnitId(req.getUnitId());
     }
 

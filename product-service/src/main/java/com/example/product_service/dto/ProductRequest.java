@@ -14,6 +14,5 @@ public class ProductRequest {
 
     private String status;
     private Long categoryId;
-    private Long supplierId;
     private Long unitId;
 }

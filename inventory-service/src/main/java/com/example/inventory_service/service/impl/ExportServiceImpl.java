@@ -72,9 +72,6 @@ public class ExportServiceImpl implements ExportService {
 
         export.setNote(req.getNote());
         export.setDescription(req.getDescription());
-        // Nếu không có customerId, set = null (khách hàng nhập trực tiếp)
-        // Thông tin khách hàng sẽ được lưu vào customerName, customerPhone,
-        // customerAddress
         export.setCustomerId(req.getCustomerId());
         // Lưu thông tin khách hàng nếu có (nhập trực tiếp)
         export.setCustomerName(req.getCustomerName());
@@ -121,7 +118,7 @@ public class ExportServiceImpl implements ExportService {
                 d.setImportDetailsId(item.getImportDetailsId());
                 d.setQuantity(item.getQuantity());
                 d.setUnitPrice(item.getUnitPrice());
-                d.setDiscountPercent(item.getDiscountPercent() != null ? item.getDiscountPercent() : BigDecimal.ZERO);
+                d.setDiscountPercent(item.getDiscountPercent());
 
                 BigDecimal line = item.getUnitPrice()
                         .multiply(BigDecimal.valueOf(item.getQuantity()));
@@ -196,9 +193,6 @@ public class ExportServiceImpl implements ExportService {
             export.setCode(req.getCode());
         }
         export.setStoreId(req.getStoreId());
-        // Nếu không có customerId, set = null (khách hàng nhập trực tiếp)
-        // Thông tin khách hàng sẽ được lưu vào customerName, customerPhone,
-        // customerAddress
         export.setCustomerId(req.getCustomerId());
         // Lưu thông tin khách hàng nếu có (nhập trực tiếp)
         export.setCustomerName(req.getCustomerName());
@@ -246,7 +240,7 @@ public class ExportServiceImpl implements ExportService {
                 d.setImportDetailsId(item.getImportDetailsId());
                 d.setQuantity(item.getQuantity());
                 d.setUnitPrice(item.getUnitPrice());
-                d.setDiscountPercent(item.getDiscountPercent() != null ? item.getDiscountPercent() : BigDecimal.ZERO);
+                d.setDiscountPercent(item.getDiscountPercent());
 
                 BigDecimal line = item.getUnitPrice()
                         .multiply(BigDecimal.valueOf(item.getQuantity()));
