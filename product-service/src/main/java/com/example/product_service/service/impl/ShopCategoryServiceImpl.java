@@ -38,10 +38,41 @@ public class ShopCategoryServiceImpl implements ShopCategoryService {
     @Override
     public CategoryDto create(CategoryRequest req) {
         ShopCategory c = new ShopCategory();
+        // Tự động tạo mã nếu không có trong request
+        String codeToUse = (req.getCode() != null && !req.getCode().isBlank()) 
+            ? req.getCode() 
+            : generateCategoryCode();
+        req.setCode(codeToUse);
         apply(req, c);
         c.setCreatedAt(LocalDateTime.now());
         c.setUpdatedAt(LocalDateTime.now());
         return toDto(repo.save(c));
+    }
+
+    /**
+     * Tự động tạo mã danh mục: DM + 5 số (ví dụ: DM00001)
+     */
+    private String generateCategoryCode() {
+        String prefix = "DM";
+        List<ShopCategory> existing = repo.findByCodeStartingWith(prefix);
+        long maxNumber = 0;
+        
+        for (ShopCategory c : existing) {
+            if (c.getCode() != null && c.getCode().length() >= 3) {
+                try {
+                    String numberPart = c.getCode().substring(2);
+                    long num = Long.parseLong(numberPart);
+                    if (num > maxNumber) {
+                        maxNumber = num;
+                    }
+                } catch (NumberFormatException e) {
+                    // Bỏ qua nếu không parse được số
+                }
+            }
+        }
+        
+        long nextNumber = maxNumber + 1;
+        return prefix + String.format("%05d", nextNumber);
     }
 
     @Override

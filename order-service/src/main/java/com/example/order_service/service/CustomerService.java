@@ -9,4 +9,6 @@ public interface CustomerService {
     List<CustomerDto> getAll();
     CustomerDto getById(Long id);
     CustomerDto create(CustomerRequest req);
+    CustomerDto update(Long id, CustomerRequest req);
+    void delete(Long id);
 }

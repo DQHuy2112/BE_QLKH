@@ -46,6 +46,15 @@ public class ShopCustomer {
     @Column(name = "country")
     private String country;
 
+    @Column(name = "customer_code")
+    private String code;
+
+    @Column(name = "customer_name")
+    private String name;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
     @Column(name = "status")
     private String status;
 

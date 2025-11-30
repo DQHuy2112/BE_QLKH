@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface ShopSupplierRepository extends JpaRepository<ShopSupplier, Long> {
     List<ShopSupplier> findByType(String type);
+    List<ShopSupplier> findByCodeStartingWith(String prefix);
 }

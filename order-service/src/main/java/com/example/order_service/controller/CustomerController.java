@@ -23,8 +23,24 @@ public class CustomerController {
         return ApiResponse.ok(service.getAll());
     }
 
+    @GetMapping("/{id}")
+    public ApiResponse<CustomerDto> getById(@PathVariable Long id) {
+        return ApiResponse.ok(service.getById(id));
+    }
+
     @PostMapping
     public ApiResponse<CustomerDto> create(@RequestBody CustomerRequest req) {
         return ApiResponse.ok("Created", service.create(req));
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<CustomerDto> update(@PathVariable Long id, @RequestBody CustomerRequest req) {
+        return ApiResponse.ok("Updated", service.update(id, req));
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable Long id) {
+        service.delete(id);
+        return ApiResponse.ok("Deleted", null);
     }
 }

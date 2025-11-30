@@ -40,6 +40,12 @@ public class ShopProduct {
     @Column(name = "category_id")
     private Long categoryId;
 
+    @Column(name = "supplier_id")
+    private Long supplierId; // NCC chính (tương thích ngược)
+
+    @Column(name = "supplier_ids", columnDefinition = "TEXT")
+    private String supplierIds; // Danh sách NCC dưới dạng JSON: [1,2,3]
+
     @Column(name = "unit_id")
     private Long unitId;
 

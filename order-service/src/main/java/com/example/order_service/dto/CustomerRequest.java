@@ -12,4 +12,7 @@ public class CustomerRequest {
     private String firstName;
     private String address;
     private String country;
+    private String code;
+    private String name;
+    private String description;
 }
