@@ -38,13 +38,14 @@ public class DataService {
             StringBuilder summary = new StringBuilder("Danh sách sản phẩm (tối đa 20 sản phẩm đầu tiên):\n");
             int count = 0;
             for (Map<String, Object> p : products) {
-                if (count >= 20) break;
+                if (count >= 20)
+                    break;
                 String code = String.valueOf(p.getOrDefault("code", "N/A"));
                 String name = String.valueOf(p.getOrDefault("name", "N/A"));
                 Object qty = p.getOrDefault("quantity", 0);
                 Object price = p.getOrDefault("unitPrice", 0);
-                summary.append(String.format("- %s (%s): Tồn kho %s, Giá %s\n", 
-                    code, name, qty, price));
+                summary.append(String.format("- %s (%s): Tồn kho %s, Giá %s\n",
+                        code, name, qty, price));
                 count++;
             }
             if (products.size() > 20) {
@@ -69,7 +70,8 @@ public class DataService {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {
+                    })
                     .block(TIMEOUT);
 
             if (response != null && response.containsKey("data")) {
@@ -84,7 +86,8 @@ public class DataService {
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                             .accept(MediaType.APPLICATION_JSON)
                             .retrieve()
-                            .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                            .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                            })
                             .block(TIMEOUT);
                     return products != null ? products : new ArrayList<>();
                 } catch (Exception e) {
@@ -100,10 +103,13 @@ public class DataService {
 
     /**
      * Lấy thống kê tồn kho từ inventory-service
+     * Sử dụng tồn kho thực tế từ API stocks (tổng hợp từ tất cả các kho)
      */
     public String getInventorySummary(String token) {
         try {
             List<Map<String, Object>> products = fetchProductsList(token);
+            // Lấy tồn kho thực tế từ API stocks
+            Map<Long, Integer> stockMap = fetchStocksByProduct(token);
 
             if (products == null || products.isEmpty()) {
                 return "Không có dữ liệu tồn kho.";
@@ -117,17 +123,31 @@ public class DataService {
             double totalValue = 0;
 
             for (Map<String, Object> p : products) {
-                Object qtyObj = p.getOrDefault("quantity", 0);
-                int qty = qtyObj instanceof Number ? ((Number) qtyObj).intValue() : 0;
+                // Lấy productId
+                Object idObj = p.get("id");
+                Long productId = null;
+                if (idObj != null) {
+                    try {
+                        productId = Long.valueOf(idObj.toString());
+                    } catch (NumberFormatException e) {
+                        // Skip invalid productId
+                    }
+                }
+
+                // Lấy tồn kho thực tế từ stockMap (tổng hợp từ tất cả các kho)
+                int qty = (productId != null) ? stockMap.getOrDefault(productId, 0) : 0;
                 Object priceObj = p.getOrDefault("unitPrice", 0);
                 double price = priceObj instanceof Number ? ((Number) priceObj).doubleValue() : 0;
 
                 totalQuantity += qty;
                 totalValue += qty * price;
 
-                if (qty == 0) outOfStock++;
-                else if (qty <= 10) lowStock++;
-                else inStock++;
+                if (qty == 0)
+                    outOfStock++;
+                else if (qty <= 10)
+                    lowStock++;
+                else
+                    inStock++;
             }
 
             return String.format("""
@@ -186,7 +206,8 @@ public class DataService {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {
+                    })
                     .block(TIMEOUT);
 
             if (response != null && response.containsKey("data")) {
@@ -198,7 +219,8 @@ public class DataService {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .accept(MediaType.APPLICATION_JSON)
                         .retrieve()
-                        .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                        .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                        })
                         .block(TIMEOUT);
                 return orders != null ? orders : new ArrayList<>();
             }
@@ -213,6 +235,55 @@ public class DataService {
      */
     public List<Map<String, Object>> fetchProductsListPublic(String token) {
         return fetchProductsList(token);
+    }
+
+    /**
+     * Lấy tồn kho từ tất cả các kho (tổng hợp theo productId)
+     */
+    public Map<Long, Integer> fetchStocksByProduct(String token) {
+        try {
+            WebClient webClient = webClientBuilder.baseUrl(apiGatewayUrl).build();
+            Map<String, Object> response = webClient.get()
+                    .uri("/api/stocks")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {
+                    })
+                    .block(TIMEOUT);
+
+            Map<Long, Integer> stockMap = new HashMap<>();
+            if (response != null && response.containsKey("data")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> stocks = (List<Map<String, Object>>) response.get("data");
+                if (stocks != null) {
+                    for (Map<String, Object> stock : stocks) {
+                        Object productIdObj = stock.get("productId");
+                        if (productIdObj != null) {
+                            try {
+                                Long productId = Long.valueOf(productIdObj.toString());
+                                Integer quantity = getIntegerValue(stock, "quantity", 0);
+                                stockMap.merge(productId, quantity, Integer::sum);
+                            } catch (NumberFormatException e) {
+                                log.warn("Invalid productId in stock: {}", productIdObj);
+                            }
+                        }
+                    }
+                }
+            }
+            return stockMap;
+        } catch (Exception e) {
+            log.error("Error fetching stocks", e);
+            return new HashMap<>();
+        }
+    }
+
+    private Integer getIntegerValue(Map<String, Object> map, String key, Integer defaultValue) {
+        Object value = map.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        return defaultValue;
     }
 
     /**
@@ -255,4 +326,3 @@ public class DataService {
         }
     }
 }
-
