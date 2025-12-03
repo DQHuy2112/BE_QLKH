@@ -391,40 +391,35 @@ public class SalesInsightService {
             List<SalesInsightResponse.TopProduct> topProducts,
             List<SalesInsightResponse.DecliningProduct> declining,
             int days) {
-        try {
-            StringBuilder context = new StringBuilder("Phân tích lịch sử bán hàng " + days + " ngày gần nhất:\n\n");
-            context.append("1. Xu hướng doanh thu: ").append(revenue.getTrend())
-                    .append(" (").append(String.format("%.1f", revenue.getGrowthRate())).append("%)\n");
-            context.append("   Lý do: ").append(revenue.getReason()).append("\n\n");
+        StringBuilder context = new StringBuilder("Phân tích lịch sử bán hàng " + days + " ngày gần nhất:\n\n");
+        context.append("1. Xu hướng doanh thu: ").append(revenue.getTrend())
+                .append(" (").append(String.format("%.1f", revenue.getGrowthRate())).append("%)\n");
+        context.append("   Lý do: ").append(revenue.getReason()).append("\n\n");
 
-            context.append("2. Top sản phẩm bán chạy:\n");
-            topProducts.stream().limit(5).forEach(p -> {
-                context.append(String.format("   - %s: %.0f VNĐ (%d sản phẩm)\n",
-                        p.getProductName(), p.getRevenue(), p.getQuantitySold()));
+        context.append("2. Top sản phẩm bán chạy:\n");
+        topProducts.stream().limit(5).forEach(p -> {
+            context.append(String.format("   - %s: %.0f VNĐ (%d sản phẩm)\n",
+                    p.getProductName(), p.getRevenue(), p.getQuantitySold()));
+        });
+        context.append("\n");
+
+        if (!declining.isEmpty()) {
+            context.append("3. Sản phẩm giảm doanh số:\n");
+            declining.stream().limit(3).forEach(p -> {
+                context.append(String.format("   - %s: Giảm %.1f%%\n",
+                        p.getProductName(), p.getRevenueDecline()));
             });
-            context.append("\n");
-
-            if (!declining.isEmpty()) {
-                context.append("3. Sản phẩm giảm doanh số:\n");
-                declining.stream().limit(3).forEach(p -> {
-                    context.append(String.format("   - %s: Giảm %.1f%%\n",
-                            p.getProductName(), p.getRevenueDecline()));
-                });
-            }
-
-            String prompt = "Bạn là chuyên viên phân tích bán hàng. " +
-                    "Hãy phân tích dữ liệu sau và đưa ra nhận định tổng quan (2-3 câu) về tình hình bán hàng:\n\n" +
-                    context.toString();
-
-            return geminiService.invokeGemini(prompt);
-        } catch (Exception e) {
-            log.warn("Failed to generate AI analysis", e);
-            return String.format(
-                    "Phân tích %d ngày: Doanh thu %s (%.1f%%). Top sản phẩm: %s. %d sản phẩm đang giảm doanh số.",
-                    days, revenue.getTrend(), revenue.getGrowthRate(),
-                    topProducts.isEmpty() ? "N/A" : topProducts.get(0).getProductName(),
-                    declining.size());
         }
+
+        String prompt = "Bạn là chuyên viên phân tích bán hàng. " +
+                "Hãy phân tích dữ liệu sau và đưa ra nhận định tổng quan (2-3 câu) về tình hình bán hàng:\n\n" +
+                context.toString();
+
+        String analysis = geminiService.invokeGemini(prompt);
+        if (analysis == null || analysis.isBlank()) {
+            throw new RuntimeException("Gemini không trả về phân tích bán hàng.");
+        }
+        return analysis.trim();
     }
 
     private List<Map<String, Object>> fetchExports(String token, LocalDate from, LocalDate to) {

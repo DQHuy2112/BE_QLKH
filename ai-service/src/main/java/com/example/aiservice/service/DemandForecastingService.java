@@ -259,29 +259,26 @@ public class DemandForecastingService {
             return "Tất cả sản phẩm đều có tồn kho đủ trong 30 ngày tới.";
         }
 
-        try {
-            StringBuilder context = new StringBuilder("Phân tích dự đoán nhu cầu nhập hàng:\n");
-            context.append(String.format("- Tổng số sản phẩm: %d\n", totalProducts));
-            context.append(String.format("- Số sản phẩm cần nhập: %d\n", forecasts.size()));
+        StringBuilder context = new StringBuilder("Phân tích dự đoán nhu cầu nhập hàng:\n");
+        context.append(String.format("- Tổng số sản phẩm: %d\n", totalProducts));
+        context.append(String.format("- Số sản phẩm cần nhập: %d\n", forecasts.size()));
 
-            if (!forecasts.isEmpty()) {
-                context.append("- Top 5 sản phẩm cần nhập sớm nhất:\n");
-                forecasts.stream().limit(5).forEach(f -> {
-                    context.append(String.format("  + %s: Cần nhập sau %d ngày, đề xuất %d sản phẩm\n",
-                            f.getProductName(), f.getPredictedDaysUntilReorder(), f.getRecommendedQuantity()));
-                });
-            }
+        context.append("- Top 5 sản phẩm cần nhập sớm nhất:\n");
+        forecasts.stream().limit(5).forEach(f -> {
+            context.append(String.format("  + %s: Cần nhập sau %d ngày, đề xuất %d sản phẩm\n",
+                    f.getProductName(), f.getPredictedDaysUntilReorder(), f.getRecommendedQuantity()));
+        });
 
-            String prompt = "Bạn là chuyên gia phân tích chuỗi cung ứng. " +
-                    "Hãy phân tích dữ liệu dự đoán nhu cầu nhập hàng sau và đưa ra nhận định tổng quan:\n\n" +
-                    context.toString() +
-                    "\nHãy đưa ra phân tích ngắn gọn (2-3 câu) về tình hình tồn kho và đề xuất hành động.";
+        String prompt = "Bạn là chuyên gia phân tích chuỗi cung ứng. " +
+                "Hãy phân tích dữ liệu dự đoán nhu cầu nhập hàng sau và đưa ra nhận định tổng quan:\n\n" +
+                context.toString() +
+                "\nHãy đưa ra phân tích ngắn gọn (2-3 câu) về tình hình tồn kho và đề xuất hành động.";
 
-            return geminiService.invokeGemini(prompt);
-        } catch (Exception e) {
-            log.warn("Failed to generate AI analysis, using default", e);
-            return "Dựa trên phân tích lịch sử bán hàng và nhập hàng, hệ thống đã đưa ra dự đoán nhu cầu nhập hàng cho các sản phẩm.";
+        String analysis = geminiService.invokeGemini(prompt);
+        if (analysis == null || analysis.isBlank()) {
+            throw new RuntimeException("Gemini không trả về phân tích dự đoán nhu cầu.");
         }
+        return analysis.trim();
     }
 
     private List<Map<String, Object>> fetchStocks(String token) {
@@ -526,56 +523,46 @@ public class DemandForecastingService {
 
     private String generateProductAnalysis(Map<String, Object> product, Integer currentStock,
             Double avgDailySales, Integer predictedDaysUntilStockOut, List<Map<String, Object>> exports) {
-        try {
-            StringBuilder context = new StringBuilder("Phân tích dự báo nhu cầu cho sản phẩm:\n");
-            context.append(String.format("- Mã sản phẩm: %s\n", product.getOrDefault("code", "")));
-            context.append(String.format("- Tên sản phẩm: %s\n", product.getOrDefault("name", "")));
-            context.append(String.format("- Tồn kho hiện tại: %d\n", currentStock));
+        StringBuilder context = new StringBuilder("Phân tích dự báo nhu cầu cho sản phẩm:\n");
+        context.append(String.format("- Mã sản phẩm: %s\n", product.getOrDefault("code", "")));
+        context.append(String.format("- Tên sản phẩm: %s\n", product.getOrDefault("name", "")));
+        context.append(String.format("- Tồn kho hiện tại: %d\n", currentStock));
 
-            if (avgDailySales != null && avgDailySales > 0) {
-                context.append(String.format("- Tốc độ bán trung bình: %.2f sản phẩm/ngày\n", avgDailySales));
-            } else {
-                context.append("- Tốc độ bán: Không có dữ liệu bán hàng trong 90 ngày qua\n");
-            }
-
-            if (predictedDaysUntilStockOut != null) {
-                if (predictedDaysUntilStockOut == 0) {
-                    context.append("- Tình trạng: Đã hết hàng\n");
-                } else if (predictedDaysUntilStockOut <= 7) {
-                    context.append(String.format("- Cảnh báo: Sẽ hết hàng sau %d ngày (KHẨN CẤP)\n",
-                            predictedDaysUntilStockOut));
-                } else if (predictedDaysUntilStockOut <= 14) {
-                    context.append(String.format("- Cảnh báo: Sẽ hết hàng sau %d ngày (CẦN CHÚ Ý)\n",
-                            predictedDaysUntilStockOut));
-                } else {
-                    context.append(String.format("- Dự đoán: Sẽ hết hàng sau %d ngày\n", predictedDaysUntilStockOut));
-                }
-            }
-
-            String prompt = "Bạn là chuyên gia phân tích dự báo nhu cầu và quản trị kho hàng. " +
-                    "Hãy phân tích chi tiết dữ liệu sau và đưa ra nhận định về tình hình tồn kho và dự báo nhu cầu:\n\n"
-                    +
-                    context.toString() +
-                    "\nHãy đưa ra phân tích chi tiết (3-4 câu) về:\n" +
-                    "1. Tình hình tồn kho hiện tại\n" +
-                    "2. Xu hướng bán hàng\n" +
-                    "3. Rủi ro hết hàng\n" +
-                    "4. Khuyến nghị hành động cụ thể";
-
-            return geminiService.invokeGemini(prompt);
-        } catch (Exception e) {
-            log.warn("Failed to generate AI analysis, using default", e);
-            return String.format(
-                    "Sản phẩm %s hiện có tồn kho %d. " +
-                            (avgDailySales != null && avgDailySales > 0
-                                    ? String.format("Tốc độ bán trung bình %.2f/ngày. ", avgDailySales)
-                                    : "")
-                            +
-                            (predictedDaysUntilStockOut != null && predictedDaysUntilStockOut > 0
-                                    ? String.format("Dự đoán sẽ hết hàng sau %d ngày.", predictedDaysUntilStockOut)
-                                    : "Sản phẩm đã hết hàng hoặc không có dữ liệu bán hàng."),
-                    product.getOrDefault("name", ""), currentStock);
+        if (avgDailySales != null && avgDailySales > 0) {
+            context.append(String.format("- Tốc độ bán trung bình: %.2f sản phẩm/ngày\n", avgDailySales));
+        } else {
+            context.append("- Tốc độ bán: Không có dữ liệu bán hàng trong 90 ngày qua\n");
         }
+
+        if (predictedDaysUntilStockOut != null) {
+            if (predictedDaysUntilStockOut == 0) {
+                context.append("- Tình trạng: Đã hết hàng\n");
+            } else if (predictedDaysUntilStockOut <= 7) {
+                context.append(String.format("- Cảnh báo: Sẽ hết hàng sau %d ngày (KHẨN CẤP)\n",
+                        predictedDaysUntilStockOut));
+            } else if (predictedDaysUntilStockOut <= 14) {
+                context.append(String.format("- Cảnh báo: Sẽ hết hàng sau %d ngày (CẦN CHÚ Ý)\n",
+                        predictedDaysUntilStockOut));
+            } else {
+                context.append(String.format("- Dự đoán: Sẽ hết hàng sau %d ngày\n", predictedDaysUntilStockOut));
+            }
+        }
+
+        String prompt = "Bạn là chuyên gia phân tích dự báo nhu cầu và quản trị kho hàng. " +
+                "Hãy phân tích chi tiết dữ liệu sau và đưa ra nhận định về tình hình tồn kho và dự báo nhu cầu:\n\n"
+                +
+                context.toString() +
+                "\nHãy đưa ra phân tích chi tiết (3-4 câu) về:\n" +
+                "1. Tình hình tồn kho hiện tại\n" +
+                "2. Xu hướng bán hàng\n" +
+                "3. Rủi ro hết hàng\n" +
+                "4. Khuyến nghị hành động cụ thể";
+
+        String result = geminiService.invokeGemini(prompt);
+        if (result == null || result.isBlank()) {
+            throw new RuntimeException("Gemini không trả về phân tích chi tiết sản phẩm.");
+        }
+        return result.trim();
     }
 
     private String generateProductRecommendations(Integer currentStock, Double avgDailySales,

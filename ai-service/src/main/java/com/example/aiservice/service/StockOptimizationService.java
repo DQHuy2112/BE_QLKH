@@ -208,10 +208,57 @@ public class StockOptimizationService {
     private String generateOptimizationSummary(
             List<StockOptimizationResponse.ProductOptimization> optimizations,
             List<StockOptimizationResponse.WarehouseRecommendation> warehouseRecs) {
-        return String.format(
-                "Đã phân tích %d sản phẩm và đưa ra %d gợi ý tối ưu kho hàng. " +
-                        "Hệ thống đề xuất điều chỉnh mức tồn min/max và vị trí kho để tối ưu hiệu quả.",
-                optimizations.size(), warehouseRecs.size());
+        if (optimizations.isEmpty()) {
+            throw new IllegalStateException("Không có dữ liệu tối ưu kho để phân tích bằng Gemini");
+        }
+
+        try {
+            String topProducts = optimizations.stream()
+                    .limit(5)
+                    .map(opt -> String.format("%s (%s) - tồn hiện tại %d, min %d, max %d",
+                            opt.getProductName(),
+                            opt.getProductCode(),
+                            opt.getCurrentStock(),
+                            opt.getMinStock(),
+                            opt.getMaxStock()))
+                    .collect(Collectors.joining("\n"));
+
+            String warehouseHighlights = warehouseRecs.stream()
+                    .limit(3)
+                    .map(rec -> String.format("%s → %s (%s)",
+                            rec.getProductName(),
+                            rec.getRecommendedStoreName(),
+                            rec.getReasoning()))
+                    .collect(Collectors.joining("\n"));
+
+            String prompt = String.format("""
+                    Bạn là chuyên gia tối ưu kho hàng. Dựa trên dữ liệu sau, hãy viết 3 bullet points khuyến nghị
+                    và một câu kết luận (<120 từ):
+
+                    - Số sản phẩm đã phân tích: %d
+                    - Gợi ý điều phối kho: %d
+                    - Các sản phẩm nổi bật:
+                    %s
+
+                    - Các đề xuất điều phối kho nổi bật:
+                    %s
+
+                    Trả lời bằng tiếng Việt, tập trung vào hành động cụ thể.
+                    """,
+                    optimizations.size(),
+                    warehouseRecs.size(),
+                    topProducts.isBlank() ? "Không có" : topProducts,
+                    warehouseHighlights.isBlank() ? "Không có" : warehouseHighlights);
+
+            String summary = geminiService.invokeGemini(prompt);
+            if (summary != null && !summary.isBlank()) {
+                return summary.trim();
+            }
+        } catch (Exception e) {
+            log.error("Không thể tạo summary tối ưu kho bằng Gemini", e);
+            throw new RuntimeException("Gemini không khả dụng cho phân tích tối ưu kho: " + e.getMessage(), e);
+        }
+        throw new IllegalStateException("Gemini không trả về dữ liệu cho tối ưu kho");
     }
 
     private Double calculateAverageDailySales(List<Map<String, Object>> exports, Long productId) {

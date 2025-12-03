@@ -221,7 +221,7 @@ public class SmartInventoryAlertService {
                 return aOrder - bOrder;
             });
 
-            // Tạo summary bằng AI
+            // Tạo summary bằng AI (sử dụng Gemini API)
             String summary = generateAlertSummary(alerts);
 
             return new SmartInventoryAlertResponse(alerts, summary);
@@ -304,17 +304,49 @@ public class SmartInventoryAlertService {
 
     private String generateAlertSummary(List<SmartInventoryAlertResponse.InventoryAlert> alerts) {
         if (alerts.isEmpty()) {
-            return "Không có cảnh báo tồn kho nào.";
+            throw new IllegalStateException("Không có dữ liệu cảnh báo để phân tích bằng Gemini");
         }
 
-        long critical = alerts.stream().filter(a -> "CRITICAL".equals(a.getSeverity())).count();
-        long warning = alerts.stream().filter(a -> "WARNING".equals(a.getSeverity())).count();
-        long info = alerts.stream().filter(a -> "INFO".equals(a.getSeverity())).count();
+        long critical = alerts.stream().filter(a -> "CRITICAL".equalsIgnoreCase(a.getSeverity())).count();
+        long warning = alerts.stream().filter(a -> "WARNING".equalsIgnoreCase(a.getSeverity())).count();
+        long info = alerts.stream().filter(a -> "INFO".equalsIgnoreCase(a.getSeverity())).count();
 
-        return String.format(
-                "Tổng cộng %d cảnh báo: %d nghiêm trọng, %d cảnh báo, %d thông tin. " +
-                        "Vui lòng xem chi tiết từng cảnh báo để có hành động phù hợp.",
-                alerts.size(), critical, warning, info);
+        try {
+            StringBuilder context = new StringBuilder();
+            alerts.stream()
+                    .limit(8)
+                    .forEach(alert -> context.append(String.format(
+                            "- [%s] %s (%s): tồn kho %s, đề xuất: %s%n",
+                            alert.getSeverity(),
+                            alert.getProductName(),
+                            alert.getProductCode(),
+                            alert.getCurrentStock() != null ? alert.getCurrentStock() : "N/A",
+                            alert.getRecommendation())));
+
+            String prompt = String.format("""
+                    Bạn là chuyên gia quản lý kho. Dựa trên %d cảnh báo tồn kho dưới đây,
+                    hãy viết một đoạn tóm tắt chỉ 2-3 câu, tập trung vào rủi ro quan trọng và hành động cần làm.
+
+                    - Cảnh báo nghiêm trọng: %d
+                    - Cảnh báo mức warning: %d
+                    - Thông tin: %d
+
+                    Chi tiết:
+                    %s
+
+                    Trả lời bằng tiếng Việt, giọng điệu chuyên nghiệp, nhấn mạnh mức độ ưu tiên hành động.
+                    """,
+                    alerts.size(), critical, warning, info, context);
+
+            String aiSummary = geminiService.invokeGemini(prompt);
+            if (aiSummary != null && !aiSummary.isBlank()) {
+                return aiSummary.trim();
+            }
+        } catch (Exception e) {
+            log.error("Không thể tạo tóm tắt cảnh báo bằng Gemini", e);
+            throw new RuntimeException("Gemini không khả dụng để tạo tóm tắt cảnh báo: " + e.getMessage(), e);
+        }
+        throw new IllegalStateException("Gemini không trả về dữ liệu cho tóm tắt cảnh báo");
     }
 
     private List<Map<String, Object>> fetchStocks(String token) {

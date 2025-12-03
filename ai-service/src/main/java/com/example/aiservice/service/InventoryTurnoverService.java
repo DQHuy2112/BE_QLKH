@@ -297,28 +297,22 @@ public class InventoryTurnoverService {
             List<InventoryTurnoverResponse.ProductTurnover> turnovers,
             List<InventoryTurnoverResponse.DeadStock> deadStocks,
             List<InventoryTurnoverResponse.OverstockedItem> overstocked) {
-        try {
-            StringBuilder context = new StringBuilder("Phân tích chu kỳ tồn kho:\n");
-            context.append(String.format("- Tỉ lệ vòng quay tổng thể: %.2f\n", overallRate));
-            context.append(String.format("- Số sản phẩm hiệu quả cao: %d\n",
-                    turnovers.stream().filter(t -> "HIGH".equals(t.getEfficiency())).count()));
-            context.append(String.format("- Hàng tồn kho lâu: %d sản phẩm\n", deadStocks.size()));
-            context.append(String.format("- Hàng tồn quá lâu: %d sản phẩm\n", overstocked.size()));
+        StringBuilder context = new StringBuilder("Phân tích chu kỳ tồn kho:\n");
+        context.append(String.format("- Tỉ lệ vòng quay tổng thể: %.2f\n", overallRate));
+        context.append(String.format("- Số sản phẩm hiệu quả cao: %d\n",
+                turnovers.stream().filter(t -> "HIGH".equals(t.getEfficiency())).count()));
+        context.append(String.format("- Hàng tồn kho lâu: %d sản phẩm\n", deadStocks.size()));
+        context.append(String.format("- Hàng tồn quá lâu: %d sản phẩm\n", overstocked.size()));
 
-            String prompt = "Bạn là chuyên gia quản lý kho. " +
-                    "Hãy phân tích dữ liệu chu kỳ tồn kho sau và đưa ra nhận định (2-3 câu):\n\n" +
-                    context.toString();
+        String prompt = "Bạn là chuyên gia quản lý kho. " +
+                "Hãy phân tích dữ liệu chu kỳ tồn kho sau và đưa ra nhận định (2-3 câu):\n\n" +
+                context.toString();
 
-            return geminiService.invokeGemini(prompt);
-        } catch (Exception e) {
-            log.warn("Failed to generate AI analysis", e);
-            return String.format(
-                    "Tỉ lệ vòng quay tổng thể: %.2f. %d sản phẩm hiệu quả cao, %d hàng chết, %d hàng tồn quá lâu.",
-                    overallRate,
-                    turnovers.stream().filter(t -> "HIGH".equals(t.getEfficiency())).count(),
-                    deadStocks.size(),
-                    overstocked.size());
+        String analysis = geminiService.invokeGemini(prompt);
+        if (analysis == null || analysis.isBlank()) {
+            throw new RuntimeException("Gemini không trả về phân tích chu kỳ tồn kho.");
         }
+        return analysis.trim();
     }
 
     private List<String> generateRecommendations(
