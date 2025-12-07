@@ -1,0 +1,581 @@
+package com.example.inventory_service.service.impl;
+
+import com.example.inventory_service.client.ProductServiceClient;
+import com.example.inventory_service.dto.*;
+import com.example.inventory_service.entity.InventoryCheck;
+import com.example.inventory_service.entity.InventoryCheckDetail;
+import com.example.inventory_service.exception.NotFoundException;
+import com.example.inventory_service.repository.InventoryCheckDetailRepository;
+import com.example.inventory_service.repository.InventoryCheckRepository;
+import com.example.inventory_service.service.InventoryCheckService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class InventoryCheckServiceImpl implements InventoryCheckService {
+
+    private final InventoryCheckRepository checkRepo;
+    private final InventoryCheckDetailRepository detailRepo;
+    private final ProductServiceClient productClient;
+    private final com.example.inventory_service.repository.ShopStoreRepository storeRepo;
+    private com.example.inventory_service.repository.UserQueryRepository userRepo;
+
+    public InventoryCheckServiceImpl(
+            InventoryCheckRepository checkRepo,
+            InventoryCheckDetailRepository detailRepo,
+            ProductServiceClient productClient,
+            com.example.inventory_service.repository.ShopStoreRepository storeRepo,
+            com.example.inventory_service.repository.UserQueryRepository userRepo) {
+        this.checkRepo = checkRepo;
+        this.detailRepo = detailRepo;
+        this.productClient = productClient;
+        this.storeRepo = storeRepo;
+        this.userRepo = userRepo;
+    }
+
+    @Override
+    @Transactional
+    public InventoryCheckDto create(InventoryCheckRequest request) {
+        Date now = new Date();
+
+        InventoryCheck check = new InventoryCheck();
+
+        if (request.getCheckCode() != null && !request.getCheckCode().isBlank()) {
+            check.setCheckCode(request.getCheckCode());
+        } else {
+            check.setCheckCode(generateCode());
+        }
+
+        check.setStoreId(request.getStoreId());
+        check.setDescription(request.getDescription());
+        check.setStatus("PENDING");
+        // Nếu checkDate chỉ có date (không có time), set thời gian là thời gian hiện tại
+        Date checkDateValue = request.getCheckDate();
+        if (checkDateValue != null) {
+            // Kiểm tra xem checkDate có chỉ là date (00:00:00) không
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            cal.setTime(checkDateValue);
+            int hour = cal.get(java.util.Calendar.HOUR_OF_DAY);
+            int minute = cal.get(java.util.Calendar.MINUTE);
+            int second = cal.get(java.util.Calendar.SECOND);
+            
+            // Nếu là 00:00:00, có thể là do frontend chỉ gửi date, set thời gian hiện tại
+            if (hour == 0 && minute == 0 && second == 0) {
+                java.util.Calendar nowCal = java.util.Calendar.getInstance();
+                nowCal.setTime(now);
+                cal.set(java.util.Calendar.HOUR_OF_DAY, nowCal.get(java.util.Calendar.HOUR_OF_DAY));
+                cal.set(java.util.Calendar.MINUTE, nowCal.get(java.util.Calendar.MINUTE));
+                cal.set(java.util.Calendar.SECOND, nowCal.get(java.util.Calendar.SECOND));
+                checkDateValue = cal.getTime();
+            }
+            check.setCheckDate(checkDateValue);
+        } else {
+            check.setCheckDate(now);
+        }
+        check.setNote(request.getNote());
+        Long currentUserId = getCurrentUserId();
+        System.out.println("🔍 Creating inventory check - currentUserId: " + currentUserId);
+        if (currentUserId != null) {
+            check.setCreatedBy(currentUserId);
+            System.out.println("✅ Set createdBy: " + currentUserId);
+        } else {
+            System.err.println("⚠️ Warning: currentUserId is null when creating inventory check");
+        }
+        check.setCreatedAt(now);
+        check.setUpdatedAt(now);
+
+        // Lưu ảnh
+        if (request.getAttachmentImages() != null && !request.getAttachmentImages().isEmpty()) {
+            String joined = request.getAttachmentImages().stream()
+                    .map(this::normalizeImagePath)
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.joining(";"));
+            check.setAttachmentImage(joined);
+        }
+
+        check = checkRepo.save(check);
+
+        // Lưu chi tiết
+        BigDecimal totalDiff = BigDecimal.ZERO;
+        List<InventoryCheckDetail> details = new ArrayList<>();
+
+        if (request.getItems() != null) {
+            for (InventoryCheckDetailRequest item : request.getItems()) {
+                if (item.getSystemQuantity() == null || item.getActualQuantity() == null)
+                    continue;
+
+                InventoryCheckDetail d = new InventoryCheckDetail();
+                d.setInventoryCheckId(check.getId());
+                d.setProductId(item.getProductId());
+                d.setSystemQuantity(item.getSystemQuantity());
+                d.setActualQuantity(item.getActualQuantity());
+
+                // Tính chênh lệch
+                int diff = item.getActualQuantity() - item.getSystemQuantity();
+                d.setDifferenceQuantity(diff);
+
+                d.setUnitPrice(item.getUnitPrice());
+                d.setNote(item.getNote());
+
+                // Tính giá trị chênh lệch
+                if (item.getUnitPrice() != null) {
+                    BigDecimal value = item.getUnitPrice().multiply(BigDecimal.valueOf(diff));
+                    d.setTotalValue(value);
+                    totalDiff = totalDiff.add(value);
+                }
+
+                details.add(d);
+            }
+        }
+
+        if (!details.isEmpty()) {
+            detailRepo.saveAll(details);
+        }
+
+        return toDto(check, totalDiff);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InventoryCheckDto> search(
+            String status,
+            String checkCode,
+            LocalDate from,
+            LocalDate to) {
+        Date fromDate = from != null ? java.sql.Date.valueOf(from) : null;
+        Date toDate = to != null ? java.sql.Date.valueOf(to.plusDays(1)) : null;
+
+        List<InventoryCheck> list = checkRepo.searchInventoryChecks(
+                status,
+                checkCode,
+                fromDate,
+                toDate);
+
+        List<InventoryCheckDto> result = new ArrayList<>();
+        for (InventoryCheck check : list) {
+            result.add(toDtoWithCalcTotal(check));
+        }
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<InventoryCheckDto> searchPaged(
+            String status,
+            String checkCode,
+            LocalDate from,
+            LocalDate to,
+            Pageable pageable) {
+        // Dùng search() hiện tại rồi tự phân trang để tránh lỗi JPQL + Pageable
+        List<InventoryCheckDto> all = search(status, checkCode, from, to);
+
+        int pageSize = pageable.getPageSize();
+        int currentPage = pageable.getPageNumber();
+        int startItem = currentPage * pageSize;
+
+        List<InventoryCheckDto> content;
+        if (startItem >= all.size()) {
+            content = List.of();
+        } else {
+            int toIndex = Math.min(startItem + pageSize, all.size());
+            content = all.subList(startItem, toIndex);
+        }
+
+        return new PageImpl<>(content, pageable, all.size());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InventoryCheckDto getById(Long id) {
+        InventoryCheck check = checkRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory check not found: " + id));
+
+        return toDtoWithCalcTotal(check);
+    }
+
+    @Override
+    @Transactional
+    public InventoryCheckDto update(Long id, InventoryCheckRequest request) {
+        InventoryCheck check = checkRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory check not found: " + id));
+
+        if (!"PENDING".equals(check.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể cập nhật phiếu đang ở trạng thái PENDING");
+        }
+
+        if (request.getCheckCode() != null && !request.getCheckCode().isBlank()) {
+            check.setCheckCode(request.getCheckCode());
+        }
+        check.setStoreId(request.getStoreId());
+        check.setDescription(request.getDescription());
+        check.setCheckDate(request.getCheckDate() != null ? request.getCheckDate() : check.getCheckDate());
+        check.setNote(request.getNote());
+        check.setUpdatedAt(new Date());
+
+        // Cập nhật ảnh
+        if (request.getAttachmentImages() != null && !request.getAttachmentImages().isEmpty()) {
+            String joined = request.getAttachmentImages().stream()
+                    .map(this::normalizeImagePath)
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.joining(";"));
+            check.setAttachmentImage(joined);
+        } else {
+            check.setAttachmentImage(null);
+        }
+
+        check = checkRepo.save(check);
+
+        // Xóa chi tiết cũ và tạo mới
+        detailRepo.deleteByInventoryCheckId(id);
+
+        BigDecimal totalDiff = BigDecimal.ZERO;
+        List<InventoryCheckDetail> details = new ArrayList<>();
+
+        if (request.getItems() != null) {
+            for (InventoryCheckDetailRequest item : request.getItems()) {
+                if (item.getSystemQuantity() == null || item.getActualQuantity() == null)
+                    continue;
+
+                InventoryCheckDetail d = new InventoryCheckDetail();
+                d.setInventoryCheckId(check.getId());
+                d.setProductId(item.getProductId());
+                d.setSystemQuantity(item.getSystemQuantity());
+                d.setActualQuantity(item.getActualQuantity());
+
+                int diff = item.getActualQuantity() - item.getSystemQuantity();
+                d.setDifferenceQuantity(diff);
+
+                d.setUnitPrice(item.getUnitPrice());
+                d.setNote(item.getNote());
+
+                if (item.getUnitPrice() != null) {
+                    BigDecimal value = item.getUnitPrice().multiply(BigDecimal.valueOf(diff));
+                    d.setTotalValue(value);
+                    totalDiff = totalDiff.add(value);
+                }
+
+                details.add(d);
+            }
+        }
+
+        if (!details.isEmpty()) {
+            detailRepo.saveAll(details);
+        }
+
+        return toDto(check, totalDiff);
+    }
+
+    @Override
+    @Transactional
+    public InventoryCheckDto approve(Long id) {
+        InventoryCheck check = checkRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory check not found: " + id));
+
+        if (!"PENDING".equals(check.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể duyệt phiếu đang ở trạng thái PENDING");
+        }
+
+        check.setStatus("APPROVED");
+        Long currentUserId = getCurrentUserId();
+        if (currentUserId != null) {
+            check.setApprovedBy(currentUserId);
+        }
+        check.setApprovedAt(new Date());
+        check.setUpdatedAt(new Date());
+        check = checkRepo.save(check);
+
+        // Không cập nhật tồn kho ở đây, chờ Admin confirm
+
+        return toDtoWithCalcTotal(check);
+    }
+
+    @Override
+    @Transactional
+    public InventoryCheckDto confirm(Long id) {
+        InventoryCheck check = checkRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory check not found: " + id));
+
+        if (!"APPROVED".equals(check.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể xác nhận phiếu đã được duyệt (APPROVED)");
+        }
+
+        Long currentUserId = getCurrentUserId();
+        if (currentUserId != null) {
+            check.setConfirmedBy(currentUserId);
+        }
+        check.setConfirmedAt(new Date());
+        check.setUpdatedAt(new Date());
+        check = checkRepo.save(check);
+
+        // Cập nhật tồn kho theo chênh lệch
+        List<InventoryCheckDetail> details = detailRepo.findByInventoryCheckId(id);
+        for (InventoryCheckDetail d : details) {
+            if (d.getDifferenceQuantity() != null && d.getDifferenceQuantity() != 0) {
+                if (d.getDifferenceQuantity() > 0) {
+                    // Thực tế nhiều hơn hệ thống → tăng tồn
+                    productClient.increaseQuantity(d.getProductId(), d.getDifferenceQuantity());
+                } else {
+                    // Thực tế ít hơn hệ thống → giảm tồn
+                    productClient.decreaseQuantity(d.getProductId(), Math.abs(d.getDifferenceQuantity()));
+                }
+            }
+        }
+
+        return toDtoWithCalcTotal(check);
+    }
+
+    @Override
+    @Transactional
+    public InventoryCheckDto reject(Long id, String reason) {
+        InventoryCheck check = checkRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory check not found: " + id));
+
+        if (!"PENDING".equals(check.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể từ chối phiếu đang ở trạng thái PENDING");
+        }
+
+        check.setStatus("REJECTED");
+        check.setNote(reason != null ? reason : check.getNote());
+        Long currentUserId = getCurrentUserId();
+        System.out.println("🔍 Rejecting inventory check - currentUserId: " + currentUserId);
+        if (currentUserId != null) {
+            check.setRejectedBy(currentUserId);
+            System.out.println("✅ Set rejectedBy: " + currentUserId);
+        } else {
+            System.err.println("⚠️ Warning: currentUserId is null when rejecting inventory check");
+        }
+        check.setRejectedAt(new Date());
+        System.out.println("✅ Set rejectedAt: " + check.getRejectedAt());
+        check.setUpdatedAt(new Date());
+        check = checkRepo.save(check);
+
+        return toDtoWithCalcTotal(check);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        InventoryCheck check = checkRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory check not found: " + id));
+
+        if (!"PENDING".equals(check.getStatus())) {
+            throw new IllegalStateException("Chỉ có thể xóa phiếu đang ở trạng thái PENDING");
+        }
+
+        detailRepo.deleteByInventoryCheckId(id);
+        checkRepo.delete(check);
+    }
+
+    // ========= HELPER METHODS ========= //
+
+    private String generateCode() {
+        return "BKK" + System.currentTimeMillis();
+    }
+
+    private String normalizeImagePath(String raw) {
+        if (raw == null || raw.isBlank())
+            return null;
+
+        int idx = raw.indexOf("/uploads/");
+        if (idx >= 0) {
+            return raw.substring(idx);
+        }
+
+        if (!raw.startsWith("/")) {
+            return "/" + raw;
+        }
+
+        return raw;
+    }
+
+    private InventoryCheckDto toDtoWithCalcTotal(InventoryCheck check) {
+        List<InventoryCheckDetail> details = detailRepo.findByInventoryCheckId(check.getId());
+        BigDecimal totalDiff = BigDecimal.ZERO;
+        List<InventoryCheckDetailDto> itemDtos = new ArrayList<>();
+
+        if (details != null) {
+            for (InventoryCheckDetail d : details) {
+                if (d.getTotalValue() != null) {
+                    totalDiff = totalDiff.add(d.getTotalValue());
+                }
+
+                InventoryCheckDetailDto itemDto = new InventoryCheckDetailDto();
+                itemDto.setId(d.getId());
+                itemDto.setProductId(d.getProductId());
+                itemDto.setSystemQuantity(d.getSystemQuantity());
+                itemDto.setActualQuantity(d.getActualQuantity());
+                itemDto.setDifferenceQuantity(d.getDifferenceQuantity());
+                itemDto.setUnitPrice(d.getUnitPrice());
+                itemDto.setTotalValue(d.getTotalValue());
+                itemDto.setNote(d.getNote());
+
+                // TODO: Lấy thông tin sản phẩm từ product service
+                itemDto.setProductCode(null);
+                itemDto.setProductName(null);
+                itemDto.setUnit(null);
+
+                itemDtos.add(itemDto);
+            }
+        }
+
+        InventoryCheckDto dto = toDto(check, totalDiff);
+        dto.setItems(itemDtos);
+        return dto;
+    }
+
+    private InventoryCheckDto toDto(InventoryCheck check, BigDecimal totalDiff) {
+        InventoryCheckDto dto = new InventoryCheckDto();
+        dto.setId(check.getId());
+        dto.setCheckCode(check.getCheckCode());
+        dto.setStoreId(check.getStoreId());
+        dto.setDescription(check.getDescription());
+        dto.setStatus(check.getStatus());
+        dto.setCheckDate(check.getCheckDate());
+        dto.setCreatedBy(check.getCreatedBy());
+        dto.setCreatedAt(check.getCreatedAt());
+        dto.setApprovedBy(check.getApprovedBy());
+        dto.setApprovedAt(check.getApprovedAt());
+        dto.setConfirmedBy(check.getConfirmedBy());
+        dto.setConfirmedAt(check.getConfirmedAt());
+        dto.setRejectedBy(check.getRejectedBy());
+        dto.setRejectedAt(check.getRejectedAt());
+        dto.setNote(check.getNote());
+        dto.setTotalDifferenceValue(totalDiff);
+
+        // Lấy thông tin kho
+        if (check.getStoreId() != null) {
+            storeRepo.findById(check.getStoreId()).ifPresent(store -> {
+                dto.setStoreName(store.getName());
+            });
+        }
+
+        // Map ảnh
+        List<String> images = new ArrayList<>();
+        String raw = check.getAttachmentImage();
+        if (raw != null && !raw.isBlank()) {
+            images = Arrays.stream(raw.split(";"))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        }
+        dto.setAttachmentImages(images);
+
+        // Lấy thông tin user names và roles
+        try {
+            if (check.getCreatedBy() != null) {
+                String createdByUsername = getUserFullNameFromId(check.getCreatedBy());
+                if (createdByUsername != null && !createdByUsername.trim().isEmpty()) {
+                    dto.setCreatedByName(createdByUsername);
+                }
+                String createdByRole = getUserRoleFromId(check.getCreatedBy());
+                if (createdByRole != null && !createdByRole.trim().isEmpty()) {
+                    dto.setCreatedByRole(createdByRole);
+                }
+            }
+            if (check.getApprovedBy() != null) {
+                String approvedByUsername = getUserFullNameFromId(check.getApprovedBy());
+                if (approvedByUsername != null && !approvedByUsername.trim().isEmpty()) {
+                    dto.setApprovedByName(approvedByUsername);
+                }
+                String approvedByRole = getUserRoleFromId(check.getApprovedBy());
+                if (approvedByRole != null && !approvedByRole.trim().isEmpty()) {
+                    dto.setApprovedByRole(approvedByRole);
+                }
+            }
+            if (check.getConfirmedBy() != null) {
+                String confirmedByUsername = getUserFullNameFromId(check.getConfirmedBy());
+                if (confirmedByUsername != null && !confirmedByUsername.trim().isEmpty()) {
+                    dto.setConfirmedByName(confirmedByUsername);
+                }
+                String confirmedByRole = getUserRoleFromId(check.getConfirmedBy());
+                if (confirmedByRole != null && !confirmedByRole.trim().isEmpty()) {
+                    dto.setConfirmedByRole(confirmedByRole);
+                }
+            }
+            if (check.getRejectedBy() != null) {
+                String rejectedByUsername = getUserFullNameFromId(check.getRejectedBy());
+                if (rejectedByUsername != null && !rejectedByUsername.trim().isEmpty()) {
+                    dto.setRejectedByName(rejectedByUsername);
+                }
+                String rejectedByRole = getUserRoleFromId(check.getRejectedBy());
+                if (rejectedByRole != null && !rejectedByRole.trim().isEmpty()) {
+                    dto.setRejectedByRole(rejectedByRole);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to get user names: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return dto;
+    }
+
+    private String getUserFullNameFromId(Long userId) {
+        try {
+            if (userRepo == null) {
+                return null;
+            }
+            java.util.Optional<String> fullName = userRepo.findFullNameByUserId(userId);
+            if (fullName.isPresent() && !fullName.get().trim().isEmpty()) {
+                return fullName.get().trim();
+            }
+            java.util.Optional<String> username = userRepo.findUsernameByUserId(userId);
+            return username.orElse(null);
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to get user full name from userId " + userId + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    private String getUserRoleFromId(Long userId) {
+        try {
+            if (userRepo == null) {
+                return null;
+            }
+            java.util.Optional<String> role = userRepo.findRoleByUserId(userId);
+            return role.orElse(null);
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to get user role from userId " + userId + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    private Long getCurrentUserId() {
+        try {
+            if (userRepo == null) {
+                System.err.println("⚠️ userRepo is null in getCurrentUserId");
+                return null;
+            }
+            org.springframework.security.core.Authentication auth = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) {
+                String username = auth.getName();
+                System.out.println("🔍 Getting userId for username: " + username);
+                java.util.Optional<Long> userIdOpt = userRepo.findUserIdByUsername(username);
+                if (userIdOpt.isPresent()) {
+                    System.out.println("✅ Found userId: " + userIdOpt.get() + " for username: " + username);
+                    return userIdOpt.get();
+                } else {
+                    System.out.println("⚠️ No userId found for username: " + username);
+                }
+            } else {
+                System.err.println("⚠️ No authentication found in SecurityContext");
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️ Failed to get current userId: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
+    }
+}
