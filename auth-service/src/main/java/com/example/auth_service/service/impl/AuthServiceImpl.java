@@ -9,6 +9,7 @@ import com.example.auth_service.exception.NotFoundException;
 import com.example.auth_service.repository.AdUserRepository;
 import com.example.auth_service.security.JwtService;
 import com.example.auth_service.service.AuthService;
+import com.example.auth_service.util.ActivityLogHelper;
 import org.springframework.security.authentication.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -24,13 +25,16 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final AdUserRepository userRepository;
+    private final ActivityLogHelper activityLogHelper;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager,
                            JwtService jwtService,
-                           AdUserRepository userRepository) {
+                           AdUserRepository userRepository,
+                           ActivityLogHelper activityLogHelper) {
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.userRepository = userRepository;
+        this.activityLogHelper = activityLogHelper;
     }
 
     @Override
@@ -52,6 +56,20 @@ public class AuthServiceImpl implements AuthService {
         List<String> roles = userDetails.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .toList();
+
+        // Log login activity
+        AdUser user = userRepository.findByUsername(userDetails.getUsername()).orElse(null);
+        if (user != null) {
+            activityLogHelper.logActivity(
+                user.getId(),
+                user.getUsername(),
+                "LOGIN",
+                "USER",
+                user.getId(),
+                user.getUsername(),
+                "User logged in successfully"
+            );
+        }
 
         return new LoginResponse(token, userDetails.getUsername(), roles);
     }

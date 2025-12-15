@@ -76,7 +76,12 @@ public class JwtService {
     /* ====== EXTRACT / VALIDATE (giữ cả tên cũ cho đỡ lỗi) ====== */
 
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        try {
+            return extractClaim(token, Claims::getSubject);
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            // Vẫn có thể extract username từ expired token
+            return e.getClaims().getSubject();
+        }
     }
 
     // tên cũ thường gặp
@@ -94,8 +99,16 @@ public class JwtService {
     }
 
     private boolean isTokenExpired(String token) {
-        Date exp = extractClaim(token, Claims::getExpiration);
-        return exp != null && exp.before(new Date());
+        try {
+            Date exp = extractClaim(token, Claims::getExpiration);
+            return exp != null && exp.before(new Date());
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            // Token đã expired
+            return true;
+        } catch (Exception e) {
+            // Token không hợp lệ
+            return true;
+        }
     }
 
     private <T> T extractClaim(String token, Function<Claims, T> resolver) {

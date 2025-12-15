@@ -71,4 +71,12 @@ public class AdUser {
             inverseJoinColumns = @JoinColumn(name = "roles_id")   
     )
     private Set<AdRole> roles = new HashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "ad_user_has_permissions",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "permissions_id")
+    )
+    private Set<AdPermission> permissions = new HashSet<>();
 }

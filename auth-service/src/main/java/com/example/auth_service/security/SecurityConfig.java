@@ -34,6 +34,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login").permitAll()
                         // Profile endpoints yêu cầu authentication
                         .requestMatchers("/api/auth/profile").authenticated()
+                        // User management endpoints
+                        .requestMatchers("/api/users/**").authenticated()
+                        // Role management endpoints
+                        .requestMatchers("/api/roles/**").authenticated()
+                        // Permission management endpoints
+                        .requestMatchers("/api/permissions/**").authenticated()
+                        // Activity logs endpoints
+                        .requestMatchers("/api/activity-logs/**").authenticated()
                         // nếu mai mốt auth-service có API khác thì yêu cầu auth
                         .anyRequest().authenticated()
                 )

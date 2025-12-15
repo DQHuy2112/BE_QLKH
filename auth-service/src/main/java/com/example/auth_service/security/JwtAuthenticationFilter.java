@@ -64,12 +64,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             new WebAuthenticationDetailsSource().buildDetails(request)
                     );
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    // Token không hợp lệ (expired hoặc không match user)
+                    log.warn("JWT token is invalid for user: {}", username);
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"message\":\"Token không hợp lệ hoặc đã hết hạn\"}");
+                    return;
                 }
             }
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            // Token đã hết hạn
+            log.warn("JWT token expired: {}", e.getMessage());
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"message\":\"Token đã hết hạn\"}");
+            return;
+        } catch (io.jsonwebtoken.JwtException e) {
+            // Token không hợp lệ (malformed, signature invalid, etc.)
+            log.warn("JWT token validation failed: {}", e.getMessage());
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"message\":\"Token không hợp lệ\"}");
+            return;
         } catch (Exception e) {
-            // Log error nhưng vẫn tiếp tục filter chain để Spring Security xử lý
-            // Nếu token không hợp lệ, Spring Security sẽ trả về 403
+            // Các lỗi khác (user not found, etc.)
             log.error("JWT authentication failed", e);
+            // Vẫn để Spring Security xử lý nếu là lỗi khác
         }
 
         filterChain.doFilter(request, response);
