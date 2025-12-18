@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -26,8 +27,8 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     }
 
     @Override
-    public Page<ActivityLogDto> searchActivityLogs(Long userId, String action, Date startDate, Date endDate, String ipAddress, String userAgent, Pageable pageable) {
-        Page<ActivityLog> logs = activityLogRepository.searchActivityLogs(userId, action, startDate, endDate, ipAddress, userAgent, pageable);
+    public Page<ActivityLogDto> searchActivityLogs(Long userId, String action, Date startDate, Date endDate, String ipAddress, String userAgent, String keyword, Pageable pageable) {
+        Page<ActivityLog> logs = activityLogRepository.searchActivityLogs(userId, action, startDate, endDate, ipAddress, userAgent, keyword, pageable);
         return logs.map(ActivityLogDto::fromEntity);
     }
 
@@ -179,6 +180,19 @@ public class ActivityLogServiceImpl implements ActivityLogService {
                 weekLogs,
                 monthLogs
         );
+    }
+
+    @Override
+    @Transactional
+    @Scheduled(cron = "0 0 2 * * ?") // chạy mỗi ngày lúc 2h sáng
+    public void cleanupOldLogs() {
+        Calendar cal = Calendar.getInstance();
+        // TODO: sau này có thể lấy retentionDays từ cấu hình
+        cal.add(Calendar.DAY_OF_MONTH, -90); // giữ lại 90 ngày
+        Date threshold = cal.getTime();
+
+        int deleted = activityLogRepository.deleteByCreatedAtBefore(threshold);
+        System.out.println("ActivityLogServiceImpl.cleanupOldLogs - deleted " + deleted + " old activity logs");
     }
 }
 

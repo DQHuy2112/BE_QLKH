@@ -31,6 +31,23 @@ public class AdUser {
     @Column(name = "email")
     private String email;
 
+    @Column(name = "email_verified")
+    private Boolean emailVerified = false;
+
+    @Column(name = "email_verification_token")
+    private String emailVerificationToken;
+
+    @Column(name = "email_verification_token_expiry")
+    @Temporal(TemporalType.TIMESTAMP)
+    private Date emailVerificationTokenExpiry;
+
+    @Column(name = "password_reset_token")
+    private String passwordResetToken;
+
+    @Column(name = "password_reset_token_expiry")
+    @Temporal(TemporalType.TIMESTAMP)
+    private Date passwordResetTokenExpiry;
+
     @Column(name = "phone")
     private String phone;
 
@@ -57,6 +74,13 @@ public class AdUser {
 
     @Column(name = "active")
     private Boolean active;
+
+    @Column(name = "failed_login_attempts")
+    private Integer failedLoginAttempts = 0; // mặc định 0 lần đăng nhập sai
+
+    @Column(name = "account_locked_until")
+    @Temporal(TemporalType.TIMESTAMP)
+    private Date accountLockedUntil; // null nếu chưa bị khóa
 
     @Column(name = "created_at")
     private Date createdAt;

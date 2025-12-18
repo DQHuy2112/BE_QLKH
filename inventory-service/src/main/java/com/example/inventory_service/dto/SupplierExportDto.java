@@ -55,4 +55,7 @@ public class SupplierExportDto {
     private String exportedByRole; // Vai trò người xuất kho
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "Asia/Ho_Chi_Minh")
     private Date exportedAt; // Thời gian xuất kho
+
+    // Warnings (ví dụ: các dòng item bị skip do dữ liệu không hợp lệ)
+    private List<String> warnings;
 }

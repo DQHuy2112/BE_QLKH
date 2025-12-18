@@ -3,6 +3,7 @@ package com.example.aiservice.controller;
 import com.example.aiservice.common.ApiResponse;
 import com.example.aiservice.dto.ReceiptOCRRequest;
 import com.example.aiservice.dto.ReceiptOCRResponse;
+import com.example.aiservice.dto.UpdateReceiptMetadataRequest;
 import com.example.aiservice.service.ReceiptOCRService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,11 +32,24 @@ public class ReceiptOCRController {
         }
 
         try {
-            ReceiptOCRResponse response = receiptOCRService.processReceiptImage(request);
+            ReceiptOCRResponse response;
+            if ((request.getImageUrls() != null && !request.getImageUrls().isEmpty())
+                    || (request.getImageBase64s() != null && !request.getImageBase64s().isEmpty())) {
+                response = receiptOCRService.processBatchReceiptImages(request);
+            } else {
+                response = receiptOCRService.processReceiptImage(request);
+            }
             return ApiResponse.ok(response);
         } catch (Exception e) {
             log.error("Error processing receipt image", e);
             throw e;
         }
+    }
+
+    @PostMapping("/update-metadata")
+    public ApiResponse<String> updateReceiptMetadata(
+            @Valid @RequestBody UpdateReceiptMetadataRequest request) {
+        receiptOCRService.updateReceiptMetadata(request);
+        return ApiResponse.ok("Metadata updated", "OK");
     }
 }

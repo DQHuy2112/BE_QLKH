@@ -44,6 +44,7 @@ public class ImportServiceImpl implements ImportService {
     private final ShopImportRepository importRepo;
     private final ShopImportDetailRepository detailRepo;
     private final ProductServiceClient productClient;
+    private final com.example.inventory_service.client.AiServiceClient aiServiceClient;
     private final com.example.inventory_service.repository.ShopStoreRepository storeRepo;
     private final ShopStockRepository stockRepo;
     private com.example.inventory_service.repository.UserQueryRepository userRepo;
@@ -52,12 +53,14 @@ public class ImportServiceImpl implements ImportService {
             ShopImportRepository importRepo,
             ShopImportDetailRepository detailRepo,
             ProductServiceClient productClient,
+            com.example.inventory_service.client.AiServiceClient aiServiceClient,
             com.example.inventory_service.repository.ShopStoreRepository storeRepo,
             ShopStockRepository stockRepo,
             com.example.inventory_service.repository.UserQueryRepository userRepo) {
         this.importRepo = importRepo;
         this.detailRepo = detailRepo;
         this.productClient = productClient;
+        this.aiServiceClient = aiServiceClient;
         this.storeRepo = storeRepo;
         this.stockRepo = stockRepo;
         this.userRepo = userRepo;
@@ -135,9 +138,17 @@ public class ImportServiceImpl implements ImportService {
         // Lưu chi tiết
         BigDecimal total = BigDecimal.ZERO;
         List<ShopImportDetail> details = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        List<com.example.inventory_service.dto.UpdateReceiptMetadataRequest.ProductMetadata> aiProducts = new ArrayList<>();
 
         if (request.getItems() != null) {
+            int rowIdx = 0;
             for (ImportDetailRequest item : request.getItems()) {
+                rowIdx++;
+                if (item.getProductId() == null || item.getProductId() <= 0) {
+                    warnings.add("Dòng " + rowIdx + ": Bỏ qua vì productId không hợp lệ");
+                    continue;
+                }
                 if (item.getQuantity() == null || item.getQuantity() <= 0)
                     continue;
                 if (item.getUnitPrice() == null)
@@ -166,6 +177,14 @@ public class ImportServiceImpl implements ImportService {
                 }
 
                 total = total.add(line);
+
+                com.example.inventory_service.dto.UpdateReceiptMetadataRequest.ProductMetadata aiMeta =
+                        new com.example.inventory_service.dto.UpdateReceiptMetadataRequest.ProductMetadata();
+                aiMeta.setProductId(item.getProductId());
+                aiMeta.setQuantity(item.getQuantity());
+                aiMeta.setUnitPrice(item.getUnitPrice().doubleValue());
+                aiMeta.setTotalPrice(line.doubleValue());
+                aiProducts.add(aiMeta);
             }
         }
 
@@ -173,7 +192,30 @@ public class ImportServiceImpl implements ImportService {
             detailRepo.saveAll(details);
         }
 
-        return toDto(im, total);
+        // Gửi metadata đã được map sang ai-service (best-effort, không chặn luồng)
+        if (!aiProducts.isEmpty()) {
+            try {
+                com.example.inventory_service.dto.UpdateReceiptMetadataRequest aiReq =
+                        new com.example.inventory_service.dto.UpdateReceiptMetadataRequest();
+                aiReq.setReceiptType("IMPORT");
+                aiReq.setReceiptCode(im.getCode());
+                aiReq.setTotalAmount(total.doubleValue());
+                aiReq.setProducts(aiProducts);
+                aiServiceClient.updateReceiptMetadata(aiReq);
+            } catch (Exception ex) {
+                logger.warn("Failed to send metadata to ai-service: {}", ex.getMessage());
+            }
+        }
+
+        if (!warnings.isEmpty()) {
+            logger.warn("Import created with warnings: {}", String.join("; ", warnings));
+        }
+
+        SupplierImportDto dto = toDto(im, total);
+        if (!warnings.isEmpty()) {
+            dto.setWarnings(warnings);
+        }
+        return dto;
     }
 
     @Override
@@ -737,6 +779,7 @@ public class ImportServiceImpl implements ImportService {
     /**
      * Lấy tên đầy đủ của user từ username
      */
+    @SuppressWarnings("unused")
     private String getUserFullName(String username) {
         try {
             return userRepo.findFullNameByUsername(username)
@@ -1042,6 +1085,45 @@ public class ImportServiceImpl implements ImportService {
         } catch (Exception e) {
             System.err.println("⚠️ Failed to get user role from userId " + userId + ": " + e.getMessage());
             return null;
+        }
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        ShopImport importEntity = importRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Phiếu nhập không tồn tại với id: " + id));
+
+        // Lấy role của user hiện tại
+        Long currentUserId = getCurrentUserId();
+        String userRole = getUserRoleFromId(currentUserId);
+
+        // Kiểm tra quyền: chỉ ADMIN và MANAGER mới được xóa
+        if (userRole == null || (!userRole.equals("ADMIN") && !userRole.equals("MANAGER"))) {
+            throw new com.example.inventory_service.exception.BadRequestException("Chỉ ADMIN và MANAGER mới có quyền xóa phiếu nhập");
+        }
+
+        // Nếu là ADMIN: xóa trực tiếp
+        if ("ADMIN".equals(userRole)) {
+            // Xóa chi tiết trước
+            detailRepo.deleteByImportId(id);
+            // Xóa phiếu nhập
+            importRepo.delete(importEntity);
+            logger.info("Admin đã xóa phiếu nhập id: {}", id);
+            return;
+        }
+
+        // Nếu là MANAGER: đánh dấu status = CANCELLED và lưu note "DELETE_REQUESTED"
+        // ADMIN sẽ cần duyệt để xóa thực sự
+        if ("MANAGER".equals(userRole)) {
+            importEntity.setStatus(ImportStatus.CANCELLED);
+            String currentNote = importEntity.getNote() != null ? importEntity.getNote() : "";
+            String deleteRequestNote = "[DELETE_REQUESTED_BY_MANAGER] " + getCurrentUsername() + " đã yêu cầu xóa phiếu này. Cần ADMIN duyệt để xóa thực sự.";
+            importEntity.setNote(currentNote.isEmpty() ? deleteRequestNote : currentNote + "\n" + deleteRequestNote);
+            importEntity.setUpdatedAt(LocalDateTime.now());
+            importRepo.save(importEntity);
+            logger.info("Manager đã yêu cầu xóa phiếu nhập id: {}, cần ADMIN duyệt", id);
+            throw new com.example.inventory_service.exception.BadRequestException("Đã gửi yêu cầu xóa. ADMIN cần duyệt để xóa thực sự.");
         }
     }
 }

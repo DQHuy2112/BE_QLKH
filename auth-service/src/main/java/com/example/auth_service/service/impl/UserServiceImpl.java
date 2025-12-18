@@ -14,7 +14,10 @@ import com.example.auth_service.exception.ValidationException;
 import com.example.auth_service.repository.AdPermissionRepository;
 import com.example.auth_service.repository.AdRoleRepository;
 import com.example.auth_service.repository.AdUserRepository;
+import com.example.auth_service.service.EmailService;
+import com.example.auth_service.service.RefreshTokenService;
 import com.example.auth_service.service.UserService;
+import com.example.auth_service.util.ChangeLogUtils;
 import com.example.auth_service.util.ActivityLogHelper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,9 +25,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Calendar;
 import java.security.SecureRandom;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -35,17 +41,23 @@ public class UserServiceImpl implements UserService {
     private final AdPermissionRepository permissionRepository;
     private final PasswordEncoder passwordEncoder;
     private final ActivityLogHelper activityLogHelper;
+    private final EmailService emailService;
+    private final RefreshTokenService refreshTokenService;
 
     public UserServiceImpl(AdUserRepository userRepository,
                           AdRoleRepository roleRepository,
                           AdPermissionRepository permissionRepository,
                           PasswordEncoder passwordEncoder,
-                          ActivityLogHelper activityLogHelper) {
+                          ActivityLogHelper activityLogHelper,
+                          EmailService emailService,
+                          RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.permissionRepository = permissionRepository;
         this.passwordEncoder = passwordEncoder;
         this.activityLogHelper = activityLogHelper;
+        this.emailService = emailService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Override
@@ -82,6 +94,18 @@ public class UserServiceImpl implements UserService {
         user.setWard(request.getWard());
         user.setCountry(request.getCountry());
         user.setActive(request.getActive() != null ? request.getActive() : true);
+        // Email verification defaults
+        user.setEmailVerified(false);
+        if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            String token = generateOpaqueToken();
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.HOUR, 24);
+            user.setEmailVerificationToken(token);
+            user.setEmailVerificationTokenExpiry(cal.getTime());
+        }
+        // Khởi tạo thông tin bảo mật đăng nhập
+        user.setFailedLoginAttempts(0);
+        user.setAccountLockedUntil(null);
         user.setCreatedAt(new Date());
         user.setUpdatedAt(new Date());
 
@@ -95,6 +119,14 @@ public class UserServiceImpl implements UserService {
         }
 
         AdUser savedUser = userRepository.save(user);
+
+        // Send verification email if possible
+        if (savedUser.getEmail() != null
+                && !savedUser.getEmail().isBlank()
+                && savedUser.getEmailVerificationToken() != null
+                && !Boolean.TRUE.equals(savedUser.getEmailVerified())) {
+            emailService.sendEmailVerification(savedUser.getEmail(), savedUser.getEmailVerificationToken(), savedUser.getUsername());
+        }
         
         // Log activity
         activityLogHelper.logActivity(
@@ -108,11 +140,31 @@ public class UserServiceImpl implements UserService {
         return UserDto.fromEntity(savedUser);
     }
 
+    private String generateOpaqueToken() {
+        byte[] randomBytes = new byte[32];
+        new SecureRandom().nextBytes(randomBytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+    }
+
     @Override
     @Transactional
     public UserDto updateUser(Long id, UpdateUserRequest request) {
         AdUser user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
+
+        // Snapshot trước khi cập nhật để log before/after
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("username", user.getUsername());
+        before.put("firstName", user.getFirstName());
+        before.put("lastName", user.getLastName());
+        before.put("email", user.getEmail());
+        before.put("phone", user.getPhone());
+        before.put("address", user.getAddress());
+        before.put("province", user.getProvince());
+        before.put("district", user.getDistrict());
+        before.put("ward", user.getWard());
+        before.put("country", user.getCountry());
+        before.put("active", user.getActive());
 
         if (request.getUsername() != null) {
             // Check if new username already exists (excluding current user)
@@ -171,16 +223,32 @@ public class UserServiceImpl implements UserService {
 
         user.setUpdatedAt(new Date());
         AdUser updatedUser = userRepository.save(user);
-        
-        // Log activity
+
+        // Snapshot sau khi cập nhật
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("username", updatedUser.getUsername());
+        after.put("firstName", updatedUser.getFirstName());
+        after.put("lastName", updatedUser.getLastName());
+        after.put("email", updatedUser.getEmail());
+        after.put("phone", updatedUser.getPhone());
+        after.put("address", updatedUser.getAddress());
+        after.put("province", updatedUser.getProvince());
+        after.put("district", updatedUser.getDistrict());
+        after.put("ward", updatedUser.getWard());
+        after.put("country", updatedUser.getCountry());
+        after.put("active", updatedUser.getActive());
+
+        String details = ChangeLogUtils.buildChangeDetails(before, after);
+
+        // Log activity với chi tiết before/after
         activityLogHelper.logActivity(
-            "UPDATE_USER",
-            "USER",
-            updatedUser.getId(),
-            updatedUser.getUsername(),
-            String.format("Updated user: %s", updatedUser.getUsername())
+                "UPDATE_USER",
+                "USER",
+                updatedUser.getId(),
+                updatedUser.getUsername(),
+                details
         );
-        
+
         return UserDto.fromEntity(updatedUser);
     }
 
@@ -226,6 +294,8 @@ public class UserServiceImpl implements UserService {
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setUpdatedAt(new Date());
         userRepository.save(user);
+        // revoke refresh tokens so old sessions cannot continue after password reset
+        refreshTokenService.revokeAllUserTokens(user.getId());
         
         // Log activity
         activityLogHelper.logActivity(

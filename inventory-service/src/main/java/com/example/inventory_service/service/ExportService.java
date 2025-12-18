@@ -51,4 +51,11 @@ public interface ExportService {
     Page<SupplierExportDto> getByStore(Long storeId, Pageable pageable);
 
     Page<SupplierExportDto> getByOrder(Long orderId, Pageable pageable);
+
+    /**
+     * Xóa phiếu xuất
+     * - ADMIN: xóa trực tiếp
+     * - MANAGER: tạo delete request (cần ADMIN duyệt)
+     */
+    void delete(Long id);
 }

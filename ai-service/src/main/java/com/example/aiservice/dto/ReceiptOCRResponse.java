@@ -47,5 +47,10 @@ public class ReceiptOCRResponse {
         private String warehouse; // Tên kho hàng (từ cột 'Kho nhập' hoặc 'Kho xuất', ví dụ: "Kho 1 (KH001)")
         private Long suggestedProductId; // ProductId gợi ý từ vector search (nếu có)
         private Double matchScore; // Độ tương tự từ vector search (nếu có)
+        private Double nameConfidence; // Độ tin cậy tên
+        private Double codeConfidence; // Độ tin cậy mã
+        private Double quantityConfidence; // Độ tin cậy số lượng
+        private Double unitPriceConfidence; // Độ tin cậy đơn giá
+        private Double totalPriceConfidence; // Độ tin cậy thành tiền
     }
 }

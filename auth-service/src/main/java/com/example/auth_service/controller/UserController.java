@@ -7,9 +7,11 @@ import com.example.auth_service.dto.UpdateUserRequest;
 import com.example.auth_service.dto.UpdateUserPermissionsRequest;
 import com.example.auth_service.dto.UserDto;
 import com.example.auth_service.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -23,6 +25,7 @@ public class UserController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('MANAGER')")
     public ApiResponse<com.example.auth_service.dto.PageResponse<UserDto>> searchUsers(
             @RequestParam(required = false) String username,
             @RequestParam(required = false) String email,
@@ -49,42 +52,48 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('MANAGER')")
     public ApiResponse<UserDto> getUserById(@PathVariable Long id) {
         UserDto user = userService.getUserById(id);
         return ApiResponse.ok(user);
     }
 
     @PostMapping
-    public ApiResponse<UserDto> createUser(@RequestBody CreateUserRequest request) {
+    @PreAuthorize("hasAuthority('ADMIN')")
+    public ApiResponse<UserDto> createUser(@Valid @RequestBody CreateUserRequest request) {
         UserDto user = userService.createUser(request);
         return ApiResponse.ok("Tạo thành viên thành công", user);
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<UserDto> updateUser(@PathVariable Long id, @RequestBody UpdateUserRequest request) {
+    @PreAuthorize("hasAuthority('ADMIN')")
+    public ApiResponse<UserDto> updateUser(@PathVariable Long id, @Valid @RequestBody UpdateUserRequest request) {
         UserDto user = userService.updateUser(id, request);
         return ApiResponse.ok("Cập nhật thành viên thành công", user);
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public ApiResponse<String> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return ApiResponse.ok("Xóa thành viên thành công");
     }
 
     @PostMapping("/{id}/reset-password")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public ApiResponse<String> resetUserPassword(
             @PathVariable Long id,
-            @RequestBody ResetPasswordRequest request
+            @Valid @RequestBody ResetPasswordRequest request
     ) {
         String newPassword = userService.resetUserPassword(id, request);
         return ApiResponse.ok("Đặt lại mật khẩu thành công. Mật khẩu mới: " + newPassword, newPassword);
     }
 
     @PutMapping("/{id}/permissions")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public ApiResponse<UserDto> updateUserPermissions(
             @PathVariable Long id,
-            @RequestBody UpdateUserPermissionsRequest request
+            @Valid @RequestBody UpdateUserPermissionsRequest request
     ) {
         UserDto user = userService.updateUserPermissions(id, request);
         return ApiResponse.ok("Cập nhật quyền thành công", user);

@@ -40,9 +40,17 @@ public class CustomerServiceImpl implements CustomerService {
     @Override
     public CustomerDto create(CustomerRequest req) {
         ShopCustomer c = new ShopCustomer();
-        c.setUsername(req.getUsername());
-        c.setPassword(req.getPassword());
-        c.setEmail(req.getEmail());
+        // Chỉ set username/password nếu có trong request
+        if (req.getUsername() != null && !req.getUsername().isBlank()) {
+            c.setUsername(req.getUsername());
+        }
+        if (req.getPassword() != null && !req.getPassword().isBlank()) {
+            c.setPassword(req.getPassword());
+        }
+        // Email không bắt buộc - chỉ set nếu có
+        if (req.getEmail() != null && !req.getEmail().isBlank()) {
+            c.setEmail(req.getEmail());
+        }
         c.setPhone(req.getPhone());
         c.setFirstName(req.getFirstName());
         c.setLastName(req.getLastName());

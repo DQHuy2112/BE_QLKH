@@ -166,6 +166,16 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public List<OrderDto> getAll() {
+        return orderRepo.findAll().stream()
+                .map(o -> {
+                    List<ShopOrderDetail> details = detailRepo.findByOrderId(o.getId());
+                    return toDto(o, details);
+                })
+                .toList();
+    }
+
+    @Override
     public List<OrderDto> getByCustomer(Long customerId) {
         return orderRepo.findByCustomerId(customerId).stream()
                 .map(o -> {

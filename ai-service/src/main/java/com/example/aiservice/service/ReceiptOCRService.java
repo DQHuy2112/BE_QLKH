@@ -2,6 +2,7 @@ package com.example.aiservice.service;
 
 import com.example.aiservice.dto.ReceiptOCRRequest;
 import com.example.aiservice.dto.ReceiptOCRResponse;
+import com.example.aiservice.dto.UpdateReceiptMetadataRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +65,117 @@ public class ReceiptOCRService {
         } catch (Exception e) {
             log.error("Error processing receipt image", e);
             throw new RuntimeException("Không thể xử lý ảnh: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Xử lý batch nhiều ảnh: merge products + metadata.
+     */
+    public ReceiptOCRResponse processBatchReceiptImages(ReceiptOCRRequest request) {
+        List<ReceiptOCRResponse.ExtractedProduct> mergedProducts = new ArrayList<>();
+        ReceiptOCRResponse baseResponse = new ReceiptOCRResponse();
+        baseResponse.setReceiptType(request.getReceiptType());
+
+        List<String> imageSources = new ArrayList<>();
+        if (request.getImageUrls() != null) {
+            imageSources.addAll(request.getImageUrls());
+        }
+        if (request.getImageBase64s() != null) {
+            imageSources.addAll(request.getImageBase64s());
+        }
+
+        double totalAmount = 0.0;
+
+        for (String source : imageSources) {
+            ReceiptOCRRequest single = new ReceiptOCRRequest();
+            single.setReceiptType(request.getReceiptType());
+            if (source != null && source.startsWith("http")) {
+                single.setImageUrl(source);
+            } else {
+                single.setImageBase64(source);
+            }
+
+            ReceiptOCRResponse resp = processReceiptImage(single);
+
+            if (resp.getProducts() != null) {
+                for (ReceiptOCRResponse.ExtractedProduct p : resp.getProducts()) {
+                    // dedupe theo name+code
+                    boolean exists = mergedProducts.stream().anyMatch(mp ->
+                            Objects.equals(mp.getName(), p.getName()) &&
+                                    Objects.equals(mp.getCode(), p.getCode()));
+                    if (!exists) {
+                        mergedProducts.add(p);
+                    }
+                }
+            }
+
+            if (resp.getTotalAmount() != null) {
+                totalAmount += resp.getTotalAmount();
+            }
+
+            // Merge thông tin supplier/customer nếu thiếu
+            if (baseResponse.getSupplierName() == null) baseResponse.setSupplierName(resp.getSupplierName());
+            if (baseResponse.getSupplierPhone() == null) baseResponse.setSupplierPhone(resp.getSupplierPhone());
+            if (baseResponse.getSupplierAddress() == null) baseResponse.setSupplierAddress(resp.getSupplierAddress());
+            if (baseResponse.getCustomerName() == null) baseResponse.setCustomerName(resp.getCustomerName());
+            if (baseResponse.getCustomerPhone() == null) baseResponse.setCustomerPhone(resp.getCustomerPhone());
+            if (baseResponse.getCustomerAddress() == null) baseResponse.setCustomerAddress(resp.getCustomerAddress());
+            if (baseResponse.getReceiptCode() == null) baseResponse.setReceiptCode(resp.getReceiptCode());
+            if (baseResponse.getReceiptDate() == null) baseResponse.setReceiptDate(resp.getReceiptDate());
+            if (baseResponse.getNote() == null) baseResponse.setNote(resp.getNote());
+            if (baseResponse.getRawText() == null) baseResponse.setRawText(resp.getRawText());
+        }
+
+        baseResponse.setProducts(mergedProducts);
+        baseResponse.setTotalAmount(totalAmount > 0 ? totalAmount : null);
+        return baseResponse;
+    }
+
+    /**
+     * Cập nhật/ghi thêm metadata đã được user chỉnh sửa vào Milvus
+     * (học từ thao tác mapping thủ công).
+     */
+    public void updateReceiptMetadata(UpdateReceiptMetadataRequest request) {
+        try {
+            String searchText = buildSearchText(request);
+            List<Float> embedding = embeddingService.generateEmbedding(searchText);
+
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("receiptType", request.getReceiptType());
+            metadata.put("supplierName", request.getSupplierName());
+            metadata.put("customerName", request.getCustomerName());
+            metadata.put("receiptCode", request.getReceiptCode());
+            metadata.put("receiptDate", request.getReceiptDate());
+            metadata.put("note", request.getNote());
+            metadata.put("totalAmount", request.getTotalAmount());
+
+            if (request.getProducts() != null && !request.getProducts().isEmpty()) {
+                List<Map<String, Object>> productsMeta = new ArrayList<>();
+                for (UpdateReceiptMetadataRequest.ProductMetadata p : request.getProducts()) {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("productId", p.getProductId());
+                    m.put("name", p.getName());
+                    m.put("code", p.getCode());
+                    m.put("quantity", p.getQuantity());
+                    m.put("unitPrice", p.getUnitPrice());
+                    m.put("totalPrice", p.getTotalPrice());
+                    m.put("unit", p.getUnit());
+                    m.put("warehouse", p.getWarehouse());
+                    productsMeta.add(m);
+                }
+                metadata.put("products", productsMeta);
+            }
+
+            milvusService.saveEmbedding(
+                    request.getReceiptType(),
+                    request.getSupplierName() != null ? request.getSupplierName() : "",
+                    request.getCustomerName() != null ? request.getCustomerName() : "",
+                    embedding,
+                    metadata);
+
+            log.info("Updated receipt metadata to Milvus");
+        } catch (Exception e) {
+            log.warn("Failed to update receipt metadata", e);
         }
     }
 
@@ -203,6 +315,34 @@ public class ReceiptOCRService {
                       "totalAmount": Tổng tiền (số thực, từ 'Tổng' hoặc 'Total', bỏ dấu chấm/phẩy phân cách hàng nghìn, nếu có)
                     }
 
+                    Ví dụ JSON (tuân thủ đúng key, số không dùng dấu ngăn cách nghìn):
+                    {
+                      "supplierName": "Công ty ABC",
+                      "supplierPhone": "0909123456",
+                      "supplierAddress": "123 Đường A, Quận 1, TP.HCM",
+                      "receiptCode": "PN001",
+                      "receiptDate": "2025-01-10",
+                      "note": "Nhập hàng tháng 1",
+                      "products": [
+                        {
+                          "name": "Sữa tươi Vinamilk 1L",
+                          "code": "SUA1L",
+                          "quantity": 10,
+                          "unitPrice": 32000,
+                          "discount": 0,
+                          "totalPrice": 320000,
+                          "unit": "Hộp",
+                          "warehouse": "Kho 1 (KH001)",
+                          "nameConfidence": 0.92,
+                          "codeConfidence": 0.88,
+                          "quantityConfidence": 0.95,
+                          "unitPriceConfidence": 0.9,
+                          "totalPriceConfidence": 0.9
+                        }
+                      ],
+                      "totalAmount": 320000
+                    }
+
                     Lưu ý:
                     - Chỉ trả về JSON, không thêm text khác
                     - Nếu không tìm thấy thông tin, để giá trị null hoặc rỗng
@@ -213,6 +353,7 @@ public class ReceiptOCRService {
                     - QUAN TRỌNG: Đọc chính xác tên kho hàng từ cột 'Kho nhập', bao gồm cả mã trong ngoặc (ví dụ: "Kho 1 (KH001)")
                     - RẤT QUAN TRỌNG: Khi đọc tên nhà cung cấp/khách hàng, phải đọc ĐẦY ĐỦ toàn bộ tên, không được bỏ sót bất kỳ từ nào. Ví dụ: "Đỗ Quốc Huy" phải đọc đầy đủ, không được chỉ đọc "Huy" hoặc "Quốc Huy"
                     - Khi đọc tên, phải đọc từ đầu đến cuối, bao gồm cả họ, tên đệm và tên. Không được cắt ngắn hoặc chỉ lấy phần cuối
+                    - Trả thêm các trường confidence (0-1) cho từng sản phẩm nếu có: nameConfidence, codeConfidence, quantityConfidence, unitPriceConfidence, totalPriceConfidence
                     """;
         } else {
             return """
@@ -241,6 +382,34 @@ public class ReceiptOCRService {
                       "totalAmount": Tổng tiền (số thực, từ 'Tổng' hoặc 'Total', bỏ dấu chấm/phẩy phân cách hàng nghìn, nếu có)
                     }
 
+                    Ví dụ JSON (tuân thủ đúng key, số không dùng dấu ngăn cách nghìn):
+                    {
+                      "customerName": "Cửa hàng Minh An",
+                      "customerPhone": "0909988776",
+                      "customerAddress": "45 Lê Lợi, Đà Nẵng",
+                      "receiptCode": "PX001",
+                      "receiptDate": "2025-01-12",
+                      "note": "Xuất đơn lẻ",
+                      "products": [
+                        {
+                          "name": "Bút bi Thiên Long",
+                          "code": "BUT01",
+                          "quantity": 20,
+                          "unitPrice": 4000,
+                          "discount": 0,
+                          "totalPrice": 80000,
+                          "unit": "Cây",
+                          "warehouse": "Kho 2 (KH002)",
+                          "nameConfidence": 0.9,
+                          "codeConfidence": 0.87,
+                          "quantityConfidence": 0.93,
+                          "unitPriceConfidence": 0.9,
+                          "totalPriceConfidence": 0.9
+                        }
+                      ],
+                      "totalAmount": 80000
+                    }
+
                     Lưu ý:
                     - Chỉ trả về JSON, không thêm text khác
                     - Nếu không tìm thấy thông tin, để giá trị null hoặc rỗng
@@ -251,6 +420,7 @@ public class ReceiptOCRService {
                     - QUAN TRỌNG: Đọc chính xác tên kho hàng từ cột 'Kho xuất', bao gồm cả mã trong ngoặc (ví dụ: "Kho 1 (KH001)")
                     - RẤT QUAN TRỌNG: Khi đọc tên khách hàng, phải đọc ĐẦY ĐỦ toàn bộ tên từ đầu đến cuối, bao gồm cả họ, tên đệm và tên. Không được cắt ngắn hoặc chỉ lấy phần cuối. Ví dụ: "Đỗ Quốc Huy" phải đọc đầy đủ là "Đỗ Quốc Huy", KHÔNG được chỉ đọc "Huy" hoặc "Quốc Huy"
                     - Khi đọc tên, hãy đọc toàn bộ text trong field "Tên khách hàng" hoặc "Khách hàng", không được bỏ sót bất kỳ từ nào
+                    - Trả thêm các trường confidence (0-1) cho từng sản phẩm nếu có: nameConfidence, codeConfidence, quantityConfidence, unitPriceConfidence, totalPriceConfidence
                     """;
         }
     }
@@ -296,6 +466,11 @@ public class ReceiptOCRService {
                     product.setTotalPrice(getDoubleValue(productNode, "totalPrice"));
                     product.setUnit(getTextValue(productNode, "unit"));
                     product.setWarehouse(getTextValue(productNode, "warehouse")); // Parse warehouse từ AI
+                    product.setNameConfidence(getDoubleValue(productNode, "nameConfidence"));
+                    product.setCodeConfidence(getDoubleValue(productNode, "codeConfidence"));
+                    product.setQuantityConfidence(getDoubleValue(productNode, "quantityConfidence"));
+                    product.setUnitPriceConfidence(getDoubleValue(productNode, "unitPriceConfidence"));
+                    product.setTotalPriceConfidence(getDoubleValue(productNode, "totalPriceConfidence"));
                     products.add(product);
                 }
             }
@@ -372,6 +547,50 @@ public class ReceiptOCRService {
         return text.toString().trim();
     }
 
+    private String buildSearchText(UpdateReceiptMetadataRequest request) {
+        StringBuilder text = new StringBuilder();
+
+        if ("IMPORT".equalsIgnoreCase(request.getReceiptType())) {
+            if (request.getSupplierName() != null) {
+                text.append("Nhà cung cấp: ").append(request.getSupplierName()).append(" ");
+            }
+        } else {
+            if (request.getCustomerName() != null) {
+                text.append("Khách hàng: ").append(request.getCustomerName()).append(" ");
+            }
+        }
+
+        if (request.getProducts() != null) {
+            for (UpdateReceiptMetadataRequest.ProductMetadata product : request.getProducts()) {
+                if (product.getName() != null) {
+                    text.append("Sản phẩm: ").append(product.getName()).append(" ");
+                }
+                if (product.getCode() != null) {
+                    text.append("Mã: ").append(product.getCode()).append(" ");
+                }
+                if (product.getProductId() != null) {
+                    text.append("ID: ").append(product.getProductId()).append(" ");
+                }
+            }
+        }
+        return text.toString().trim();
+    }
+
+    /**
+     * Chuẩn hóa L2 distance score từ Milvus thành matchScore 0-1
+     * Score thấp (L2 distance nhỏ) = similarity cao = matchScore cao
+     * Công thức: matchScore = 1 / (1 + distance) để đảo ngược và chuẩn hóa về 0-1
+     */
+    private Double normalizeMatchScore(Double l2Distance) {
+        if (l2Distance == null || l2Distance < 0) {
+            return 0.0;
+        }
+        // Chuẩn hóa: score thấp (distance nhỏ) -> matchScore cao
+        // Giới hạn tối đa distance = 10 để matchScore không quá thấp
+        double normalizedDistance = Math.min(l2Distance, 10.0);
+        return 1.0 / (1.0 + normalizedDistance);
+    }
+
     /**
      * Tìm kiếm vector trong Milvus và điền thông tin vào response
      */
@@ -387,67 +606,79 @@ public class ReceiptOCRService {
 
             log.info("Found {} similar receipts", similarReceipts.size());
 
-            // Lấy phiếu tương tự nhất (score thấp nhất = tương tự nhất với L2 distance)
-            Map<String, Object> mostSimilar = similarReceipts.get(0);
-            Double score = (Double) mostSimilar.get("score");
+            if (response.getProducts() == null || response.getProducts().isEmpty()) {
+                return;
+            }
 
-            // Chỉ sử dụng nếu score < 1.0 (tương tự đủ cao)
-            if (score != null && score < 1.0) {
-                log.info("Using similar receipt with score: {}", score);
+            for (ReceiptOCRResponse.ExtractedProduct product : response.getProducts()) {
+                double bestScore = 0.0;
+                Long bestProductId = null;
 
-                // Parse metadata từ phiếu tương tự
-                String metadataStr = (String) mostSimilar.get("metadata");
-                if (metadataStr != null && !metadataStr.isEmpty()) {
+                for (Map<String, Object> candidate : similarReceipts) {
+                    Double l2Distance = (Double) candidate.get("score");
+                    Double baseScore = normalizeMatchScore(l2Distance);
+                    if (baseScore == null) {
+                        baseScore = 0.0;
+                    }
+
+                    String metadataStr = (String) candidate.get("metadata");
+                    if (metadataStr == null || metadataStr.isEmpty()) {
+                        continue;
+                    }
+
                     try {
                         JsonNode metadata = objectMapper.readTree(metadataStr);
 
-                        // Điền thông tin supplier/customer nếu chưa có
-                        if ("IMPORT".equals(receiptType)) {
-                            if (response.getSupplierName() == null && metadata.has("supplierName")) {
-                                response.setSupplierName(metadata.get("supplierName").asText());
-                            }
-                            if (response.getSupplierPhone() == null && metadata.has("supplierPhone")) {
-                                response.setSupplierPhone(metadata.get("supplierPhone").asText());
-                            }
-                            if (response.getSupplierAddress() == null && metadata.has("supplierAddress")) {
-                                response.setSupplierAddress(metadata.get("supplierAddress").asText());
-                            }
-                        } else {
-                            if (response.getCustomerName() == null && metadata.has("customerName")) {
-                                response.setCustomerName(metadata.get("customerName").asText());
-                            }
-                            if (response.getCustomerPhone() == null && metadata.has("customerPhone")) {
-                                response.setCustomerPhone(metadata.get("customerPhone").asText());
-                            }
-                            if (response.getCustomerAddress() == null && metadata.has("customerAddress")) {
-                                response.setCustomerAddress(metadata.get("customerAddress").asText());
-                            }
+                        // supplier/customer weight
+                        double weightedScore = baseScore;
+                        if ("IMPORT".equals(receiptType) && response.getSupplierName() != null
+                                && metadata.has("supplierName")
+                                && response.getSupplierName().equalsIgnoreCase(metadata.get("supplierName").asText())) {
+                            weightedScore *= 1.1;
+                        }
+                        if ("EXPORT".equals(receiptType) && response.getCustomerName() != null
+                                && metadata.has("customerName")
+                                && response.getCustomerName().equalsIgnoreCase(metadata.get("customerName").asText())) {
+                            weightedScore *= 1.1;
                         }
 
-                        // Mapping sản phẩm: nếu có thông tin sản phẩm tương tự, có thể gợi ý productId
-                        if (metadata.has("products") && response.getProducts() != null) {
-                            JsonNode similarProducts = metadata.get("products");
-                            for (ReceiptOCRResponse.ExtractedProduct product : response.getProducts()) {
-                                // Tìm sản phẩm tương tự trong metadata
-                                if (product.getName() != null && similarProducts.isArray()) {
-                                    for (JsonNode similarProduct : similarProducts) {
-                                        String similarName = similarProduct.has("name")
-                                                ? similarProduct.get("name").asText()
-                                                : "";
-                                        if (product.getName().equalsIgnoreCase(similarName)
-                                                || product.getName().toLowerCase().contains(similarName.toLowerCase())
-                                                || similarName.toLowerCase()
-                                                        .contains(product.getName().toLowerCase())) {
-                                            // Lưu productId nếu có trong metadata
-                                            if (similarProduct.has("productId")) {
-                                                product.setSuggestedProductId(similarProduct.get("productId").asLong());
-                                                product.setMatchScore(score);
-                                                log.debug("Found similar product: {} -> productId: {}, score: {}",
-                                                        product.getName(), product.getSuggestedProductId(), score);
-                                            }
-                                            break;
+                        if (metadata.has("products") && metadata.get("products").isArray()) {
+                            for (JsonNode p : metadata.get("products")) {
+                                double score = weightedScore;
+
+                                String pCode = p.has("code") && !p.get("code").isNull() ? p.get("code").asText() : null;
+                                String pName = p.has("name") && !p.get("name").isNull() ? p.get("name").asText() : null;
+                                String pWarehouse = p.has("warehouse") && !p.get("warehouse").isNull() ? p.get("warehouse").asText() : null;
+
+                                // Exact code match gets highest priority
+                                if (product.getCode() != null && pCode != null
+                                        && product.getCode().equalsIgnoreCase(pCode)) {
+                                    score = 1.0;
+                                } else {
+                                    // name fuzzy/contains
+                                    if (product.getName() != null && pName != null) {
+                                        boolean nameMatches = product.getName().equalsIgnoreCase(pName)
+                                                || product.getName().toLowerCase().contains(pName.toLowerCase())
+                                                || pName.toLowerCase().contains(product.getName().toLowerCase());
+                                        if (nameMatches) {
+                                            score *= 1.05;
                                         }
                                     }
+                                }
+
+                                // warehouse weight
+                                if (product.getWarehouse() != null && pWarehouse != null
+                                        && pWarehouse.toLowerCase().contains(product.getWarehouse().toLowerCase())) {
+                                    score *= 1.05;
+                                }
+
+                                Long pId = p.has("productId") && !p.get("productId").isNull()
+                                        ? p.get("productId").asLong()
+                                        : null;
+
+                                if (score > bestScore && pId != null) {
+                                    bestScore = score;
+                                    bestProductId = pId;
                                 }
                             }
                         }
@@ -455,8 +686,14 @@ public class ReceiptOCRService {
                         log.warn("Failed to parse metadata from similar receipt", e);
                     }
                 }
-            } else {
-                log.info("Similar receipt score too high ({}), not using it", score);
+
+                if (bestProductId != null && bestScore >= 0.6) {
+                    product.setSuggestedProductId(bestProductId);
+                    product.setMatchScore(bestScore);
+                    log.info("✅ Matched product '{}' -> productId {} with score {:.2f}", product.getName(), bestProductId, bestScore);
+                } else {
+                    log.debug("❌ No strong match for product '{}' (code: {})", product.getName(), product.getCode());
+                }
             }
         } catch (Exception e) {
             log.warn("Failed to enrich with vector search", e);

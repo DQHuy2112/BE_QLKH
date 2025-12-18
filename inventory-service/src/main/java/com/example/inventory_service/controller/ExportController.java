@@ -174,4 +174,19 @@ public class ExportController {
         Pageable pageable = PageRequest.of(page, size);
         return ApiResponse.ok(service.getByOrder(orderId, pageable));
     }
+
+    // ================= DELETE =====================
+    @DeleteMapping("/{id}")
+    public ApiResponse<String> delete(@PathVariable Long id) {
+        try {
+            service.delete(id);
+            return ApiResponse.ok("Đã xóa phiếu xuất thành công");
+        } catch (com.example.inventory_service.exception.BadRequestException e) {
+            // Nếu là BadRequestException với message về delete request, trả về success
+            if (e.getMessage() != null && e.getMessage().contains("Đã gửi yêu cầu xóa")) {
+                return ApiResponse.ok(e.getMessage());
+            }
+            throw e;
+        }
+    }
 }

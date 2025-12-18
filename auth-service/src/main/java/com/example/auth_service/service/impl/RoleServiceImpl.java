@@ -9,12 +9,15 @@ import com.example.auth_service.repository.AdPermissionRepository;
 import com.example.auth_service.repository.AdRoleRepository;
 import com.example.auth_service.service.RoleService;
 import com.example.auth_service.util.ActivityLogHelper;
+import com.example.auth_service.util.ChangeLogUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -102,6 +105,16 @@ public class RoleServiceImpl implements RoleService {
         AdRole role = roleRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Role not found with id: " + id));
 
+        // Snapshot trước khi cập nhật
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("roleCode", role.getRoleCode());
+        before.put("displayName", role.getDisplayName());
+        List<String> beforePermissions = role.getPermissions().stream()
+                .map(AdPermission::getPermissionCode)
+                .sorted()
+                .collect(Collectors.toList());
+        before.put("permissionCodes", beforePermissions);
+
         if (request.getRoleCode() != null) {
             // Check if new role code already exists (excluding current role)
             roleRepository.findByRoleCode(request.getRoleCode())
@@ -128,16 +141,28 @@ public class RoleServiceImpl implements RoleService {
 
         role.setUpdatedAt(new Date());
         AdRole updatedRole = roleRepository.save(role);
-        
-        // Log activity
+
+        // Snapshot sau khi cập nhật
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("roleCode", updatedRole.getRoleCode());
+        after.put("displayName", updatedRole.getDisplayName());
+        List<String> afterPermissions = updatedRole.getPermissions().stream()
+                .map(AdPermission::getPermissionCode)
+                .sorted()
+                .collect(Collectors.toList());
+        after.put("permissionCodes", afterPermissions);
+
+        String details = ChangeLogUtils.buildChangeDetails(before, after);
+
+        // Log activity với chi tiết before/after
         activityLogHelper.logActivity(
-            "UPDATE_ROLE",
-            "ROLE",
-            updatedRole.getId(),
-            updatedRole.getRoleCode(),
-            String.format("Updated role: %s", updatedRole.getRoleCode())
+                "UPDATE_ROLE",
+                "ROLE",
+                updatedRole.getId(),
+                updatedRole.getRoleCode(),
+                details
         );
-        
+
         return RoleDto.fromEntity(updatedRole);
     }
 

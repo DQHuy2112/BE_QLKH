@@ -63,11 +63,31 @@ spring:
           predicates:
             - Path=/api/settings/**,/api/post-categories/**,/api/posts/**
 
+        # AUTH SERVICE - Activity Logs (đặt trước để match chính xác)
+        - id: auth-service-activity-logs
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/activity-logs/**
+        
         # AUTH SERVICE
         - id: auth-service
           uri: lb://auth-service
           predicates:
-            - Path=/api/auth/**
+            - Path=/api/auth/**,
+                  /api/roles,/api/roles/**,
+                  /api/users,/api/users/**,
+                  /api/permissions,/api/permissions/**,
+                  /api/roles-permissions,/api/roles-permissions/**,
+                  /api/users-roles,/api/users-roles/**,
+                  /api/users-permissions,/api/users-permissions/**,
+                  /api/email-verification,/api/email-verification/**,
+                  /api/password-reset,/api/password-reset/**,
+                  /api/password-reset-confirm,/api/password-reset-confirm/**,
+                  /api/password-reset-confirm-email,/api/password-reset-confirm-email/**,
+                  /api/password-reset-confirm-email-send,/api/password-reset-confirm-email-send/**,
+                  /api/password-reset-confirm-email-send-success,/api/password-reset-confirm-email-send-success/**,
+                  /api/password-reset-confirm-email-send-success-email,/api/password-reset-confirm-email-send-success-email/**,
+                  /api/password-reset-confirm-email-send-success-email-send,/api/password-reset-confirm-email-send-success-email-send/**
 
         # AI SERVICE
         - id: ai-service

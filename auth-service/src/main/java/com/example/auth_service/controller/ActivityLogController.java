@@ -24,6 +24,7 @@ public class ActivityLogController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('MANAGER')")
     public ApiResponse<com.example.auth_service.dto.PageResponse<ActivityLogDto>> searchActivityLogs(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) String action,
@@ -31,11 +32,12 @@ public class ActivityLogController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) Date endDate,
             @RequestParam(required = false) String ipAddress,
             @RequestParam(required = false) String userAgent,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<ActivityLogDto> logs = activityLogService.searchActivityLogs(userId, action, startDate, endDate, ipAddress, userAgent, pageable);
+        Page<ActivityLogDto> logs = activityLogService.searchActivityLogs(userId, action, startDate, endDate, ipAddress, userAgent, keyword, pageable);
         
         com.example.auth_service.dto.PageResponse<ActivityLogDto> pageResponse = 
             new com.example.auth_service.dto.PageResponse<>(
@@ -50,26 +52,28 @@ public class ActivityLogController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('MANAGER')")
     public ApiResponse<ActivityLogDto> getActivityLogById(@PathVariable Long id) {
         ActivityLogDto log = activityLogService.getActivityLogById(id);
         return ApiResponse.ok(log);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DELETE_ACTIVITY_LOG')")
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('DELETE_ACTIVITY_LOG')")
     public ApiResponse<String> deleteActivityLog(@PathVariable Long id) {
         activityLogService.deleteActivityLog(id);
         return ApiResponse.ok("Đã xóa nhật ký hoạt động thành công");
     }
 
     @DeleteMapping("/bulk")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('DELETE_ACTIVITY_LOG')")
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('DELETE_ACTIVITY_LOG')")
     public ApiResponse<String> deleteActivityLogsBulk(@RequestBody List<Long> ids) {
         activityLogService.deleteActivityLogsBulk(ids);
         return ApiResponse.ok("Đã xóa " + ids.size() + " nhật ký hoạt động thành công");
     }
 
     @GetMapping("/statistics")
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('MANAGER')")
     public ApiResponse<com.example.auth_service.dto.ActivityLogStatisticsDto> getStatistics(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) Date startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) Date endDate
@@ -79,6 +83,7 @@ public class ActivityLogController {
     }
 
     @GetMapping("/user/{userId}")
+    @PreAuthorize("hasAuthority('ADMIN') or hasAuthority('MANAGER')")
     public ApiResponse<com.example.auth_service.dto.PageResponse<ActivityLogDto>> getActivityLogsByUserId(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "0") int page,

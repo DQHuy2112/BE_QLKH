@@ -26,6 +26,9 @@ public class JwtService {
     @Value("${jwt.expiration-ms}")
     private long expirationMs;
 
+    @Value("${jwt.refresh-expiration-ms:604800000}")
+    private long refreshExpirationMs;
+
     @PostConstruct
     public void printSecretInfo() {
         log.info("[AUTH] jwt.secret length = {}", secret != null ? secret.length() : null);
@@ -40,13 +43,17 @@ public class JwtService {
     /* ====== GENERATE TOKEN ====== */
 
     public String generateToken(UserDetails userDetails) {
+        return generateAccessToken(userDetails);
+    }
+
+    public String generateAccessToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
         // nhúng list role vào token cho gateway dùng nếu cần
         claims.put("roles",
                 userDetails.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
                         .collect(Collectors.toList()));
-        return buildToken(claims, userDetails.getUsername());
+        return buildToken(claims, userDetails.getUsername(), expirationMs);
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
@@ -55,12 +62,18 @@ public class JwtService {
                 userDetails.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
                         .collect(Collectors.toList()));
-        return buildToken(claims, userDetails.getUsername());
+        return buildToken(claims, userDetails.getUsername(), expirationMs);
     }
 
-    private String buildToken(Map<String, Object> claims, String subject) {
+    public String generateRefreshJwt(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("type", "refresh");
+        return buildToken(claims, userDetails.getUsername(), refreshExpirationMs);
+    }
+
+    private String buildToken(Map<String, Object> claims, String subject, long expiration) {
         Date now = new Date();
-        Date expiry = new Date(now.getTime() + expirationMs);
+        Date expiry = new Date(now.getTime() + expiration);
 
         return Jwts.builder()
                 .setClaims(claims)
@@ -124,13 +137,33 @@ public class JwtService {
                 .getBody();
     }
 
-    public List<String> extractRoles(String token) {
-        Claims claims = extractAllClaims(token);
-        Object rolesObj = claims.get("roles");
-        if (rolesObj instanceof List<?> list) {
-            return list.stream().map(Object::toString).toList();
+    public Date extractExpirationAllowExpired(String token) {
+        try {
+            return extractClaim(token, Claims::getExpiration);
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            return e.getClaims().getExpiration();
+        } catch (Exception e) {
+            return null;
         }
-        return Collections.emptyList();
+    }
+
+    public List<String> extractRoles(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            Object rolesObj = claims.get("roles");
+            if (rolesObj instanceof List<?> list) {
+                return list.stream().map(Object::toString).toList();
+            }
+            return Collections.emptyList();
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            Object rolesObj = e.getClaims().get("roles");
+            if (rolesObj instanceof List<?> list) {
+                return list.stream().map(Object::toString).toList();
+            }
+            return Collections.emptyList();
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 
 }

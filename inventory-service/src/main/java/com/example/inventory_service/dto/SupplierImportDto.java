@@ -68,4 +68,7 @@ public class SupplierImportDto {
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "Asia/Ho_Chi_Minh")
     private Date importedAt; // Thời gian nhập kho
 
+    // Warnings (ví dụ: các dòng item bị skip do dữ liệu không hợp lệ)
+    private List<String> warnings;
+
 }

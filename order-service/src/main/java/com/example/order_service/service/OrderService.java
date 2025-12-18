@@ -12,6 +12,8 @@ public interface OrderService {
 
     OrderDto create(OrderRequest req);
 
+    List<OrderDto> getAll();
+
     List<OrderDto> getByCustomer(Long customerId);
 
     OrderDto getById(Long id);

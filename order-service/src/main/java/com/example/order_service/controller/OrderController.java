@@ -29,6 +29,12 @@ public class OrderController {
         return ApiResponse.ok("Created", service.create(req));
     }
 
+    // List all orders (used by reports/analytics)
+    @GetMapping
+    public ApiResponse<List<OrderDto>> getAll() {
+        return ApiResponse.ok(service.getAll());
+    }
+
     @GetMapping("/by-customer/{customerId}")
     public ApiResponse<List<OrderDto>> getByCustomer(@PathVariable Long customerId) {
         return ApiResponse.ok(service.getByCustomer(customerId));

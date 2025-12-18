@@ -2,15 +2,18 @@ package com.example.aiservice.controller;
 
 import com.example.aiservice.common.ApiResponse;
 import com.example.aiservice.dto.*;
+import com.example.aiservice.exception.AiServiceException;
 import com.example.aiservice.service.DataService;
 import com.example.aiservice.service.GeminiService;
 import com.example.aiservice.service.ProductDescriptionParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/ai")
@@ -21,6 +24,7 @@ public class AiController {
     private final GeminiService geminiService;
     private final ProductDescriptionParser descriptionParser;
     private final DataService dataService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping("/chat")
     public ApiResponse<AiChatResponse> chat(
@@ -201,85 +205,261 @@ public class AiController {
     public ApiResponse<ProductDescriptionResponse> generateDescription(
             @Valid @RequestBody ProductDescriptionRequest request) {
         String prompt = """
-                Bạn là chuyên gia viết nội dung thương mại điện tử chuyên nghiệp.
-                Hãy viết mô tả sản phẩm với tên: "%s".
+                Bạn là chuyên gia viết nội dung thương mại điện tử chuyên nghiệp, sử dụng tiếng Việt tự nhiên, dễ đọc.
+                Hãy viết mô tả chi tiết cho sản phẩm có tên: "%s".
                 
-                Yêu cầu:
-                1. "short": Mô tả ngắn gọn (50-100 từ), tập trung vào điểm nổi bật chính
-                2. "seo": Mô tả chuẩn SEO (100-200 từ), có từ khóa, dễ tìm kiếm trên Google
-                3. "long": Mô tả chi tiết (200-400 từ), đầy đủ thông tin, tính năng, lợi ích
-                4. "attributes": Mảng các thuộc tính gợi ý như: chất liệu, kích thước, màu sắc, 
-                   mã màu (hex), thương hiệu, xuất xứ, bảo hành, trọng lượng, v.v.
+                Yêu cầu nội dung:
+                1. "short": Mô tả ngắn gọn (80-150 từ)
+                   - Nêu được nhóm sản phẩm, đối tượng sử dụng, 2–3 lợi ích chính.
+                2. "seo": Mô tả chuẩn SEO (180-280 từ)
+                   - Có chèn tự nhiên 2–3 lần tên sản phẩm
+                   - Nhắc tới các từ khóa gợi ý như: chất lượng, chính hãng, bảo hành, giao hàng, giá tốt (nếu phù hợp)
+                   - Đoạn văn mạch lạc, không liệt kê khô khan.
+                3. "long": Mô tả chi tiết (300-600 từ)
+                   - Chia nội dung thành các đoạn rõ ý: tổng quan, tính năng nổi bật, thông số/đặc điểm, trải nghiệm sử dụng, bảo hành – hậu mãi.
+                   - Tập trung vào lợi ích thực tế cho người dùng trong bối cảnh kho hàng/bán lẻ.
+                   - Viết dạng văn bản thuần, không dùng markdown, không bullet.
+                4. "attributes": Mảng các thuộc tính gợi ý, dạng chuỗi ngắn, ví dụ:
+                   - "chất liệu: ..."
+                   - "kích thước: ..."
+                   - "màu sắc: ..."
+                   - "bảo hành: ..."
+                   - "xuất xứ: ..."
+                   - "trọng lượng: ..."
                 
                 Trả về JSON với format:
                 {
                   "short": "...",
                   "seo": "...",
                   "long": "...",
-                  "attributes": ["chất liệu: ...", "size: ...", "màu: ...", "#hexcode", ...]
+                  "attributes": ["chất liệu: ...", "kích thước: ...", "màu sắc: ...", "bảo hành: ...", "xuất xứ: ..."]
                 }
                 
-                Không thêm giải thích khác ngoài JSON. Chỉ trả về JSON thuần túy.
+                Chỉ trả về JSON thuần túy, không thêm lời giải thích, không thêm markdown.
                 """.formatted(request.getName());
-        String text = geminiService.invokeGemini(prompt);
-        return ApiResponse.ok(descriptionParser.parse(text));
+        try {
+            String text = geminiService.invokeGemini(prompt);
+            return ApiResponse.ok(descriptionParser.parse(text));
+        } catch (AiServiceException ex) {
+            // Fallback mô tả đơn giản khi Gemini quá tải / hết quota
+            String name = request.getName();
+            String shortDesc =
+                    "Sản phẩm " + name +
+                            " là lựa chọn phù hợp cho nhu cầu sử dụng thực tế trong kho hàng và cửa hàng bán lẻ. " +
+                            "Thiết kế đơn giản, dễ bố trí, giúp tối ưu quy trình nhập – xuất – lưu trữ, đồng thời mang lại trải nghiệm sử dụng thuận tiện cho nhân viên.";
+
+            String seoDesc =
+                    "Sản phẩm " + name +
+                            " được thiết kế hướng tới sự bền bỉ, ổn định và dễ thao tác trong môi trường làm việc hàng ngày. " +
+                            "Người dùng có thể ứng dụng trong nhiều kịch bản khác nhau như trưng bày, lưu kho, đóng gói hoặc giao nhận. " +
+                            "Khi bổ sung đầy đủ thông tin về chất liệu, kích thước, tải trọng, bảo hành và xuất xứ, mô tả sản phẩm sẽ giúp khách hàng dễ dàng so sánh, lựa chọn và tin tưởng hơn khi đặt mua trực tuyến.";
+
+            String longDesc =
+                    "Sản phẩm " + name +
+                            " phù hợp sử dụng trong hệ thống quản lý kho hàng, siêu thị mini, cửa hàng bán lẻ hoặc các đơn vị phân phối cần chuẩn hóa danh mục hàng hóa. " +
+                            "Tùy vào cấu hình thực tế, sản phẩm có thể được làm từ nhiều loại chất liệu khác nhau (kim loại, nhựa cứng, gỗ, v.v.) nhằm đáp ứng các yêu cầu về độ bền và tính thẩm mỹ.\n\n" +
+                            "Khi mô tả chi tiết, bạn nên bổ sung thêm các thông tin như: kích thước tổng thể, trọng lượng, màu sắc, tải trọng tối đa, tiêu chuẩn an toàn, phụ kiện đi kèm và điều kiện bảo quản. " +
+                            "Ngoài ra, việc nêu rõ chính sách bảo hành, thời gian đổi trả, đơn vị cung cấp và xuất xứ sẽ giúp khách hàng yên tâm hơn trong quá trình lựa chọn.\n\n" +
+                            "Để tăng hiệu quả bán hàng, có thể gợi ý thêm các tình huống sử dụng thực tế (ví dụ: kết hợp với các loại kệ, thùng, thiết bị khác trong kho) và lợi ích cụ thể mà sản phẩm mang lại cho người vận hành. " +
+                            "Những thông tin này không chỉ hỗ trợ đội ngũ bán hàng tư vấn tốt hơn mà còn giúp hệ thống quản lý kho xây dựng dữ liệu sản phẩm rõ ràng, dễ tra cứu.";
+
+            ProductDescriptionResponse fallback = ProductDescriptionResponse.builder()
+                    .shortDescription(shortDesc)
+                    .seoDescription(seoDesc)
+                    .longDescription(longDesc)
+                    .attributes(List.of(
+                            "chất liệu: cập nhật theo thực tế",
+                            "kích thước: cập nhật theo thực tế",
+                            "bảo hành: cập nhật theo chính sách",
+                            "xuất xứ: cập nhật theo thực tế"))
+                    .build();
+
+            return ApiResponse.ok(fallback);
+        }
     }
 
     @PostMapping("/inventory-forecast")
     public ApiResponse<InventoryForecastResponse> forecast(
             @Valid @RequestBody InventoryForecastRequest request) {
         List<InventoryForecastRequest.ItemSummary> items = request.getItems();
-        
-        // Xây dựng danh sách sản phẩm với thông tin chi tiết
+
+        // Xây dựng danh sách sản phẩm với thông tin chi tiết để gửi cho Gemini
         StringBuilder itemsData = new StringBuilder();
         for (InventoryForecastRequest.ItemSummary item : items) {
-            itemsData.append(String.format("- SKU: %s | Tên: %s | Tồn kho: %d", 
-                item.getCode(), item.getName(), item.getQuantity()));
+            itemsData.append(String.format("- SKU: %s | Tên: %s | Tồn kho: %d",
+                    item.getCode(), item.getName(), item.getQuantity()));
             if (item.getAvgDailySales() != null && item.getAvgDailySales() > 0) {
                 double daysRemaining = item.getQuantity() / item.getAvgDailySales();
-                itemsData.append(String.format(" | Bán TB/ngày: %.2f | Còn đủ: %.1f ngày", 
-                    item.getAvgDailySales(), daysRemaining));
+                itemsData.append(String.format(" | Bán TB/ngày: %.2f | Còn đủ: %.1f ngày",
+                        item.getAvgDailySales(), daysRemaining));
             }
             itemsData.append("\n");
         }
-        
+
         String prompt = """
                 Bạn là chuyên gia quản trị kho và dự báo time-series chuyên nghiệp.
                 Phân tích dữ liệu tồn kho và dự báo nhu cầu trong 7 ngày tới.
-                
+
                 Dữ liệu sản phẩm:
                 %s
-                
-                Nhiệm vụ:
-                1. DỰ ĐOÁN SỐ LƯỢNG SẼ THIẾU TRONG 7 NGÀY TỚI:
-                   - Tính toán dựa trên tồn kho hiện tại và tốc độ bán (nếu có)
-                   - Ước tính số lượng thiếu hụt
-                   - Ưu tiên các SKU có nguy cơ cao nhất
-                
-                2. CẢNH BÁO CHI TIẾT:
-                   - "SKU [mã] chỉ đủ cho [X] ngày nữa" → Tính toán chính xác số ngày
-                   - "SKU [mã] sẽ hết hàng vào [ngày]" → Dự báo ngày hết hàng
-                   - Cảnh báo các SKU có tồn kho < 7 ngày bán
-                
-                3. CẢNH BÁO DƯ HÀNG/TỒN KHO CAO:
-                   - Xác định SKU có tồn kho quá cao (tồn > 30 ngày bán)
-                   - Phân tích rủi ro: vốn bị đọng, hàng lỗi thời, chi phí lưu kho
-                   - Gợi ý giải pháp: giảm giá, khuyến mãi, ngừng nhập
-                
-                4. ĐỀ XUẤT SỐ LƯỢNG CẦN NHẬP:
-                   - Tính toán số lượng nhập tối ưu cho từng SKU thiếu hàng
-                   - Đảm bảo đủ hàng cho ít nhất 14-30 ngày
-                   - Gợi ý thời điểm nhập hàng
-                
-                Format trả lời:
-                - Ngắn gọn, rõ ràng, có số liệu cụ thể
-                - Ưu tiên các cảnh báo khẩn cấp trước
-                - Đưa ra hành động cụ thể, có thể thực hiện ngay
-                
-                Hãy phân tích và đưa ra khuyến nghị chi tiết.
+
+                Nhiệm vụ và FORMAT BẮT BUỘC:
+
+                1. Xác định các SKU có nguy cơ thiếu hàng (itemsAtRisk):
+                   - SKU có tồn kho ước tính < 7 ngày bán hoặc đã hết hàng.
+                   - Với mỗi SKU, tính:
+                     - daysRemaining: số ngày ước tính còn đủ hàng (có thể là số thực, ví dụ 3.5)
+                     - recommendedPurchaseQty: số lượng đề xuất nhập thêm để đủ hàng ~21 ngày.
+
+                2. Xác định các SKU tồn kho cao / dư hàng (overstockItems):
+                   - SKU có tồn kho ước tính > 30 ngày bán.
+                   - Với mỗi SKU, tính:
+                     - daysOfStock: số ngày ước tính có thể bán hết lượng tồn.
+                     - recommendation: gợi ý hành động (ví dụ: "Giảm giá nhẹ 10-15%% và đẩy khuyến mãi",
+                       "Cân nhắc luân chuyển sang kho bán tốt hơn", ...).
+
+                3. Tạo phần summary (tóm tắt):
+                   - Tối đa 2-3 đoạn ngắn.
+                   - Nêu tổng quan số SKU có nguy cơ thiếu, số SKU tồn cao, và hành động nên ưu tiên.
+
+                HÃY TRẢ VỀ JSON THUẦN với format CHÍNH XÁC như sau
+                (không thêm bất kỳ text nào bên ngoài JSON, không dùng markdown, không giải thích thêm):
+
+                {
+                  "itemsAtRisk": [
+                    {
+                      "code": "SKU001",
+                      "name": "Tên sản phẩm",
+                      "quantity": 10,
+                      "daysRemaining": 3.5,
+                      "recommendedPurchaseQty": 50
+                    }
+                  ],
+                  "overstockItems": [
+                    {
+                      "code": "SKU002",
+                      "name": "Tên sản phẩm B",
+                      "quantity": 300,
+                      "daysOfStock": 45.0,
+                      "recommendation": "Giảm giá nhẹ 10-15%% và đẩy khuyến mãi trong 2 tuần tới."
+                    }
+                  ],
+                  "summary": "Đoạn tóm tắt tiếng Việt rõ ràng, dễ hiểu về tình hình tồn kho."
+                }
+
+                NHẮC LẠI: Chỉ trả về JSON đúng format trên, không thêm bất kỳ nội dung nào khác.
                 """.formatted(itemsData.toString());
-        
-        String text = geminiService.invokeGemini(prompt);
-        return ApiResponse.ok(new InventoryForecastResponse(text));
+
+        try {
+            String text = geminiService.invokeGemini(prompt);
+            // Parse JSON trả về từ Gemini về cấu trúc InventoryForecastResponse
+            InventoryForecastResponse parsed = objectMapper.readValue(text, InventoryForecastResponse.class);
+            return ApiResponse.ok(parsed);
+        } catch (Exception ex) {
+            // Bất kỳ lỗi nào (Gemini, JSON parse, ...) đều dùng fallback rule-based
+            log.warn("Gemini inventory forecast failed, returning fallback structured response: {}", ex.getMessage());
+            InventoryForecastResponse fallback = buildFallbackInventoryRecommendation(items);
+            return ApiResponse.ok(fallback);
+        }
+    }
+
+    private InventoryForecastResponse buildFallbackInventoryRecommendation(List<InventoryForecastRequest.ItemSummary> items) {
+        if (items == null || items.isEmpty()) {
+            return InventoryForecastResponse.builder()
+                    .itemsAtRisk(List.of())
+                    .overstockItems(List.of())
+                    .summary("Không có dữ liệu tồn kho để phân tích.")
+                    .build();
+        }
+
+        var outOfStock = items.stream()
+                .filter(i -> i.getQuantity() != null && i.getQuantity() <= 0)
+                .limit(10)
+                .collect(Collectors.toList());
+
+        var withSales = items.stream()
+                .filter(i -> i.getQuantity() != null && i.getQuantity() > 0 && i.getAvgDailySales() != null && i.getAvgDailySales() > 0)
+                .collect(Collectors.toList());
+
+        var lowByDays = withSales.stream()
+                .filter(i -> (i.getQuantity() / i.getAvgDailySales()) < 7.0)
+                .sorted((a, b) -> Double.compare(a.getQuantity() / a.getAvgDailySales(), b.getQuantity() / b.getAvgDailySales()))
+                .limit(10)
+                .collect(Collectors.toList());
+
+        var overStock = withSales.stream()
+                .filter(i -> (i.getQuantity() / i.getAvgDailySales()) > 30.0)
+                .sorted((a, b) -> Double.compare((b.getQuantity() / b.getAvgDailySales()), (a.getQuantity() / a.getAvgDailySales())))
+                .limit(10)
+                .collect(Collectors.toList());
+
+        // Map sang cấu trúc DTO mới
+        List<InventoryForecastResponse.ItemAtRisk> atRiskDtos = lowByDays.stream()
+                .map(i -> {
+                    double days = i.getQuantity() / i.getAvgDailySales();
+                    long need = (long) Math.ceil(i.getAvgDailySales() * 21.0 - i.getQuantity()); // mục tiêu ~21 ngày tồn
+                    if (need < 0) need = 0;
+                    return InventoryForecastResponse.ItemAtRisk.builder()
+                            .code(i.getCode())
+                            .name(i.getName())
+                            .quantity(i.getQuantity())
+                            .daysRemaining(days)
+                            .recommendedPurchaseQty(need)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        // Hết hàng cũng được xem là "at risk" với daysRemaining = 0 và gợi ý nhập
+        atRiskDtos.addAll(
+                outOfStock.stream()
+                        .map(i -> InventoryForecastResponse.ItemAtRisk.builder()
+                                .code(i.getCode())
+                                .name(i.getName())
+                                .quantity(i.getQuantity())
+                                .daysRemaining(0.0)
+                                .recommendedPurchaseQty(50L) // giá trị mặc định, người dùng sẽ tự điều chỉnh
+                                .build())
+                        .collect(Collectors.toList())
+        );
+
+        List<InventoryForecastResponse.OverstockItem> overStockDtos = overStock.stream()
+                .map(i -> {
+                    double days = i.getQuantity() / i.getAvgDailySales();
+                    String recommendation = "Cân nhắc khuyến mãi/xả tồn hoặc luân chuyển sang kho bán chạy hơn trong 2-4 tuần tới.";
+                    return InventoryForecastResponse.OverstockItem.builder()
+                            .code(i.getCode())
+                            .name(i.getName())
+                            .quantity(i.getQuantity())
+                            .daysOfStock(days)
+                            .recommendation(recommendation)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        String summary;
+        int atRiskCount = atRiskDtos.size();
+        int overStockCount = overStockDtos.size();
+
+        if (atRiskCount == 0 && overStockCount == 0) {
+            summary = "Tồn kho hiện tại nhìn chung ở mức an toàn. Không có SKU nào sắp hết hàng hoặc tồn kho quá cao theo dữ liệu 7 ngày gần nhất.";
+        } else {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Báo cáo nhanh tồn kho dựa trên dữ liệu bán hàng và tồn kho gần đây: ");
+            if (atRiskCount > 0) {
+                sb.append("Có ").append(atRiskCount)
+                        .append(" SKU có nguy cơ thiếu hàng trong 7 ngày tới hoặc đã hết hàng, nên ưu tiên đặt nhập sớm. ");
+            }
+            if (overStockCount > 0) {
+                sb.append("Có ").append(overStockCount)
+                        .append(" SKU đang tồn kho cao (ước tính > 30 ngày bán), cần xem xét khuyến mãi hoặc luân chuyển để giảm tồn.");
+            }
+            summary = sb.toString();
+        }
+
+        return InventoryForecastResponse.builder()
+                .itemsAtRisk(atRiskDtos)
+                .overstockItems(overStockDtos)
+                .summary(summary)
+                .build();
     }
 }

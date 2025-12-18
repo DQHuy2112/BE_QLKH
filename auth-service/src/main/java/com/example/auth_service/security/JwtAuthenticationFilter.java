@@ -14,6 +14,8 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.example.auth_service.service.TokenBlacklistService;
+
 import java.io.IOException;
 
 @Component
@@ -23,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(
@@ -33,7 +36,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
         // Cho qua login endpoint không cần JWT
-        if (path.equals("/api/auth/login")) {
+        if (path.equals("/api/auth/login")
+                || path.equals("/api/auth/refresh")
+                || path.equals("/api/auth/forgot-password")
+                || path.equals("/api/auth/reset-password")
+                || path.equals("/api/auth/verify-email")
+                || path.equals("/api/auth/resend-verification")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -48,6 +56,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             final String token = authHeader.substring(7);
+
+            // Check blacklist first
+            if (tokenBlacklistService.isTokenBlacklisted(token)) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"message\":\"Token đã bị vô hiệu hóa\"}");
+                return;
+            }
             final String username = jwtService.extractUsername(token);
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {

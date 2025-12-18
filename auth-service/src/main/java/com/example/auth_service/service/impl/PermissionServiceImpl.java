@@ -9,11 +9,14 @@ import com.example.auth_service.exception.DuplicateException;
 import com.example.auth_service.repository.AdPermissionRepository;
 import com.example.auth_service.service.PermissionService;
 import com.example.auth_service.util.ActivityLogHelper;
+import com.example.auth_service.util.ChangeLogUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -89,6 +92,11 @@ public class PermissionServiceImpl implements PermissionService {
         AdPermission permission = permissionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Permission not found with id: " + id));
 
+        // Snapshot trước khi cập nhật để log before/after
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("permissionCode", permission.getPermissionCode());
+        before.put("displayName", permission.getDisplayName());
+
         if (request.getPermissionCode() != null) {
             // Check if new permission code already exists (excluding current permission)
             permissionRepository.findByPermissionCode(request.getPermissionCode())
@@ -106,14 +114,21 @@ public class PermissionServiceImpl implements PermissionService {
 
         permission.setUpdatedAt(new Date());
         AdPermission updatedPermission = permissionRepository.save(permission);
-        
-        // Log activity
+
+        // Snapshot sau khi cập nhật
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("permissionCode", updatedPermission.getPermissionCode());
+        after.put("displayName", updatedPermission.getDisplayName());
+
+        String details = ChangeLogUtils.buildChangeDetails(before, after);
+
+        // Log activity với chi tiết before/after
         activityLogHelper.logActivity(
-            "UPDATE_PERMISSION",
-            "PERMISSION",
-            updatedPermission.getId(),
-            updatedPermission.getPermissionCode(),
-            String.format("Updated permission: %s", updatedPermission.getPermissionCode())
+                "UPDATE_PERMISSION",
+                "PERMISSION",
+                updatedPermission.getId(),
+                updatedPermission.getPermissionCode(),
+                details
         );
         
         return PermissionDto.fromEntity(updatedPermission);

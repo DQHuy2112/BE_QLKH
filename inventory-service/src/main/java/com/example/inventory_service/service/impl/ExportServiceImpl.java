@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,18 +45,21 @@ public class ExportServiceImpl implements ExportService {
     private final com.example.inventory_service.repository.ShopStoreRepository storeRepo;
     private final ShopStockRepository stockRepo;
     private com.example.inventory_service.repository.UserQueryRepository userRepo;
+    private final com.example.inventory_service.client.AiServiceClient aiServiceClient;
 
     public ExportServiceImpl(
             ShopExportRepository exportRepo,
             ShopExportDetailRepository detailRepo,
             com.example.inventory_service.repository.ShopStoreRepository storeRepo,
             ShopStockRepository stockRepo,
-            com.example.inventory_service.repository.UserQueryRepository userRepo) {
+            com.example.inventory_service.repository.UserQueryRepository userRepo,
+            com.example.inventory_service.client.AiServiceClient aiServiceClient) {
         this.exportRepo = exportRepo;
         this.detailRepo = detailRepo;
         this.storeRepo = storeRepo;
         this.stockRepo = stockRepo;
         this.userRepo = userRepo;
+        this.aiServiceClient = aiServiceClient;
     }
 
     @Override
@@ -126,9 +128,17 @@ public class ExportServiceImpl implements ExportService {
         // Chi tiết phiếu xuất
         BigDecimal total = BigDecimal.ZERO;
         List<ShopExportDetail> details = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        List<com.example.inventory_service.dto.UpdateReceiptMetadataRequest.ProductMetadata> aiProducts = new ArrayList<>();
 
         if (req.getItems() != null) {
+            int rowIdx = 0;
             for (ExportDetailRequest item : req.getItems()) {
+                rowIdx++;
+                if (item.getProductId() == null || item.getProductId() <= 0) {
+                    warnings.add("Dòng " + rowIdx + ": Bỏ qua vì productId không hợp lệ");
+                    continue;
+                }
                 if (item.getQuantity() == null || item.getQuantity() <= 0) {
                     continue;
                 }
@@ -160,6 +170,14 @@ public class ExportServiceImpl implements ExportService {
                 total = total.add(line);
 
                 details.add(d);
+
+                com.example.inventory_service.dto.UpdateReceiptMetadataRequest.ProductMetadata aiMeta =
+                        new com.example.inventory_service.dto.UpdateReceiptMetadataRequest.ProductMetadata();
+                aiMeta.setProductId(item.getProductId());
+                aiMeta.setQuantity(item.getQuantity());
+                aiMeta.setUnitPrice(item.getUnitPrice().doubleValue());
+                aiMeta.setTotalPrice(line.doubleValue());
+                aiProducts.add(aiMeta);
             }
         }
 
@@ -167,7 +185,30 @@ public class ExportServiceImpl implements ExportService {
             detailRepo.saveAll(details);
         }
 
-        return toDto(export, total);
+        // Gửi metadata đã được map sang ai-service (best-effort, không chặn luồng)
+        if (!aiProducts.isEmpty()) {
+            try {
+                com.example.inventory_service.dto.UpdateReceiptMetadataRequest aiReq =
+                        new com.example.inventory_service.dto.UpdateReceiptMetadataRequest();
+                aiReq.setReceiptType("EXPORT");
+                aiReq.setReceiptCode(export.getCode());
+                aiReq.setTotalAmount(total.doubleValue());
+                aiReq.setProducts(aiProducts);
+                aiServiceClient.updateReceiptMetadata(aiReq);
+            } catch (Exception ex) {
+                logger.warn("Failed to send metadata to ai-service: {}", ex.getMessage());
+            }
+        }
+
+        if (!warnings.isEmpty()) {
+            logger.warn("Export created with warnings: {}", String.join("; ", warnings));
+        }
+
+        SupplierExportDto dto = toDto(export, total);
+        if (!warnings.isEmpty()) {
+            dto.setWarnings(warnings);
+        }
+        return dto;
     }
 
     @Override
@@ -1047,6 +1088,58 @@ public class ExportServiceImpl implements ExportService {
         } catch (Exception e) {
             System.err.println("⚠️ Failed to get user role from userId " + userId + ": " + e.getMessage());
             return null;
+        }
+    }
+
+    private String getCurrentUsername() {
+        try {
+            org.springframework.security.core.Authentication auth = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) {
+                return auth.getName();
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        return null;
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        ShopExport exportEntity = exportRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Phiếu xuất không tồn tại với id: " + id));
+
+        // Lấy role của user hiện tại
+        Long currentUserId = getCurrentUserId();
+        String userRole = getUserRoleFromId(currentUserId);
+
+        // Kiểm tra quyền: chỉ ADMIN và MANAGER mới được xóa
+        if (userRole == null || (!userRole.equals("ADMIN") && !userRole.equals("MANAGER"))) {
+            throw new com.example.inventory_service.exception.BadRequestException("Chỉ ADMIN và MANAGER mới có quyền xóa phiếu xuất");
+        }
+
+        // Nếu là ADMIN: xóa trực tiếp
+        if ("ADMIN".equals(userRole)) {
+            // Xóa chi tiết trước
+            detailRepo.deleteByExportId(id);
+            // Xóa phiếu xuất
+            exportRepo.delete(exportEntity);
+            logger.info("Admin đã xóa phiếu xuất id: {}", id);
+            return;
+        }
+
+        // Nếu là MANAGER: đánh dấu status = CANCELLED và lưu note "DELETE_REQUESTED"
+        // ADMIN sẽ cần duyệt để xóa thực sự
+        if ("MANAGER".equals(userRole)) {
+            exportEntity.setStatus(ExportStatus.CANCELLED);
+            String currentNote = exportEntity.getNote() != null ? exportEntity.getNote() : "";
+            String deleteRequestNote = "[DELETE_REQUESTED_BY_MANAGER] " + getCurrentUsername() + " đã yêu cầu xóa phiếu này. Cần ADMIN duyệt để xóa thực sự.";
+            exportEntity.setNote(currentNote.isEmpty() ? deleteRequestNote : currentNote + "\n" + deleteRequestNote);
+            exportEntity.setUpdatedAt(LocalDateTime.now());
+            exportRepo.save(exportEntity);
+            logger.info("Manager đã yêu cầu xóa phiếu xuất id: {}, cần ADMIN duyệt", id);
+            throw new com.example.inventory_service.exception.BadRequestException("Đã gửi yêu cầu xóa. ADMIN cần duyệt để xóa thực sự.");
         }
     }
 }

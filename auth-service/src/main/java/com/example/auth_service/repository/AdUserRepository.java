@@ -11,6 +11,9 @@ import java.util.Optional;
 
 public interface AdUserRepository extends JpaRepository<AdUser, Long> {
     Optional<AdUser> findByUsername(String username);
+    Optional<AdUser> findByEmail(String email);
+    Optional<AdUser> findByEmailVerificationToken(String token);
+    Optional<AdUser> findByPasswordResetToken(String token);
     
     @Query("SELECT DISTINCT u FROM AdUser u LEFT JOIN u.roles r WHERE " +
            "(:username IS NULL OR LOWER(u.username) LIKE LOWER(CONCAT('%', :username, '%'))) AND " +

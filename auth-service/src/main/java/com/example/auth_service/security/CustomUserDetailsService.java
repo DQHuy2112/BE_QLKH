@@ -9,6 +9,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -30,11 +31,18 @@ public class CustomUserDetailsService implements UserDetailsService {
                 .collect(Collectors.toList());
 
         boolean enabled = Boolean.TRUE.equals(user.getActive());
+        
+        // Check if account is locked (either disabled or locked until a future date)
+        boolean accountLocked = !enabled;
+        Date lockedUntil = user.getAccountLockedUntil();
+        if (lockedUntil != null && lockedUntil.after(new Date())) {
+            accountLocked = true;
+        }
 
         return User.withUsername(user.getUsername())
                 .password(user.getPassword())
                 .authorities(authorities)
-                .accountLocked(!enabled)
+                .accountLocked(accountLocked)
                 .disabled(!enabled)
                 .build();
     }

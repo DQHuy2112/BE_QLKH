@@ -6,7 +6,7 @@ spring:
     name: auth-service
 
   datasource:
-    url: jdbc:mysql://localhost:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/qlkh?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Ho_Chi_Minh
     username: root
     password: Viethien1@
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -20,9 +20,36 @@ spring:
       hibernate.naming.physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
       hibernate.naming.implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
 
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:false}
+
 jwt:
   secret: this-is-my-ultra-long-jwt-secret-key-Viethien1@7890
-  expiration-ms: 86400000
+  # Access token expiration (30 minutes)
+  expiration-ms: 1800000
+  # Refresh token expiration (7 days)
+  refresh-expiration-ms: 604800000
+
+app:
+  auth:
+    cleanup-rate-ms: 3600000 # 1 hour
+  cors:
+    enabled: false
+  email:
+    enabled: false
+    from: no-reply@qlkh.local
+  # used in email links
+  frontend:
+    base-url: http://localhost:3000
 
 logging:
   level:

@@ -44,4 +44,11 @@ public interface ImportService {
     List<SupplierImportDto> getByStore(Long storeId);
 
     Page<SupplierImportDto> getByStore(Long storeId, Pageable pageable);
+
+    /**
+     * Xóa phiếu nhập
+     * - ADMIN: xóa trực tiếp
+     * - MANAGER: tạo delete request (cần ADMIN duyệt)
+     */
+    void delete(Long id);
 }
